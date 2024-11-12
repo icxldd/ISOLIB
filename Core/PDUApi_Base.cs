@@ -401,7 +401,11 @@ namespace ISOLib.Core
     {
         public T_PDU_IT ItemType; // value= PDU_IT_UNIQUE_RESP_ID_TABLE
         public UInt32 NumEntries; // number of entries in the table
-        public IntPtr pUniqueData; //PduEcuUniqueRespData * pointer to array of table entries for each ECU response
+        /// <summary>
+        /// 指针
+        /// <see cref="PduEcuUniqueRespData"/>
+        /// </summary>
+        public IntPtr pUniqueData; //pointer to array of table entries for each ECU response
 
         [MarshalAs(UnmanagedType.IUnknown)]
         public PduEcuUniqueRespData UniqueData;

@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace TestWin
-{
+{ 
     public partial class Form1 : Form
     {
         public Form1()
@@ -60,17 +60,9 @@ namespace TestWin
             public string name;
             public uint NumEntries;
             public PDU_RSC_STATUS_DATA pResourceStatusData;
-            
         }
-        public class StructWrapBase
-        {
-            IntPtr GetIntPtr()
-            {
-                IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(this));
-                Marshal.StructureToPtr(this, pItemPtr, false);
-                return pItemPtr;
-            }
-        }
+     
+ 
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern void HelloWord(IntPtr pItem, byte[] p2, UInt32[] p3,PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
@@ -107,9 +99,19 @@ namespace TestWin
             //}
 
             // 调用 C++ 函数
-            HelloWord(pItemPtr, new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
+            HelloWord(item.GetIntPtr(), new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
             HelloWord2(13);
 
+        }
+    }
+
+    public static class StructBaseExtensions
+    {
+        public static IntPtr GetIntPtr<T>(this T myStruct) where T : struct
+        {
+            IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(myStruct));
+            Marshal.StructureToPtr(myStruct, pItemPtr, false);
+            return pItemPtr;
         }
     }
 }
