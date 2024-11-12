@@ -43,6 +43,7 @@
   <ItemGroup>
     <Compile Include="Class1.cs" />
     <Compile Include="Core\Extensions\StructBaseExtensions.cs" />
+    <Compile Include="Core\PduApi.cs" />
     <Compile Include="Core\PDUApi_Base.cs" />
     <Compile Include="Core\StructWrapBase.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

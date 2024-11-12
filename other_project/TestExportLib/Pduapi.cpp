@@ -7,7 +7,7 @@ void HelloWord(PDU_RSC_STATUS_ITEM* pItem,UINT8 *p2, ULONG* p3, PDU_RSC_STATUS_D
 {
     wchar_t debugString[256]; // 假设每个参数的最大宽度是256个字符
     OutputDebugStringA(("进入"));
-
+    pItem->NumEntries = 0x11;
     auto p1 = pItem->ItemType;
     auto p222 = pItem->NumEntries;
 
