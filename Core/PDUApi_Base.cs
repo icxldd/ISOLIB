@@ -202,7 +202,7 @@ namespace ISOLib.Core
         public IntPtr pResourceIdDataArray; //PduRscIdItemData指针
     }
 
-    public enum PduObjt
+    public enum T_Pdu_Objt
     {
         PDU_OBJT_PROTOCOL = 0x8021, /* Object type for object PROTOCOL of MDF.*/
         PDU_OBJT_BUSTYPE = 0x8022, /* Object type for object BUSTYPE of MDF.*/
@@ -238,7 +238,7 @@ namespace ISOLib.Core
         public IntPtr pData; /* pointer to the specific IOCTL data structure */
     }
 
-    public enum PduCopt
+    public enum T_Pdu_Copt
     {
         PDU_COPT_STARTCOMM = 0x8001,
         PDU_COPT_STOPCOMM = 0x8002,
@@ -373,7 +373,7 @@ namespace ISOLib.Core
         public byte[] pDataBytes;
     }
 
-    public enum PduErrEvt
+    public enum T_Pdu_Err_Evt
     {
         PDU_ERR_EVT_NOERROR = 0x00000000,
         PDU_ERR_EVT_FRAME_STRUCT = 0x00000100,
