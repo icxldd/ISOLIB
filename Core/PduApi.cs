@@ -120,13 +120,15 @@ namespace ISOLib.Core
         }
 
     }
-    public delegate UInt32 PConstruct([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr pApiTag);
-    public delegate UInt32 PDestruct();
+
     // 定义回调函数委托
     public delegate void CALLBACKFNC(IntPtr lpv);
+
+    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr pApiTag);
+
     // 定义委托
     public delegate uint PRegisterEventCallbackDelegate(uint hMod, uint hCLL, CALLBACKFNC callback);
-    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr lpv);
+    public delegate uint PGetModuleIdsDelegate(IntPtr pduGetModelIds);//PDU_MODULE_ITEM **
     public delegate uint PModuleConnectDelegate(uint hMod);
     public delegate uint PGetVersionDelegate(uint hMod, ref PDU_VERSION_DATA pVersionData);
     public delegate uint PGetResourceIdsDelegate(uint hMod, PduRscData pResourceIdData, ref PduRscIdItem pResourceIdList);
@@ -153,16 +155,60 @@ namespace ISOLib.Core
 
     public class DefineConst 
     {
-        public static readonly string Construct = "PDUConstruct";
-        public static readonly string Destruct = "PDUDestruct";
+        public static readonly string PDUConstruct = "PDUConstruct";
+        public static readonly string PDURegisterEventCallback = "PDURegisterEventCallback";
+        public static readonly string PDUGetModuleIds = "PDUGetModuleIds";
+        public static readonly string PDUModuleConnect = "PDUModuleConnect";
+        public static readonly string PDUGetVersion = "PDUGetVersion";
+        public static readonly string PDUGetResourceIds = "PDUGetResourceIds";
+        public static readonly string PDUGetObjectId = "PDUGetObjectId";
+        public static readonly string PDUCreateComLogicalLink = "PDUCreateComLogicalLink";
+        public static readonly string PDUGetResourceStatus = "PDUGetResourceStatus";
+        public static readonly string PDUConnect = "PDUConnect";
+        public static readonly string PDUIoCtl = "PDUIoCtl";
+        public static readonly string PDUStartComPrimitive = "PDUStartComPrimitive";
+        public static readonly string PDUSetComParam = "PDUSetComParam";
+        public static readonly string PDUGetComParam = "PDUGetComParam";
+        public static readonly string PDUGetEventItem = "PDUGetEventItem";
+        public static readonly string PDUDestroyItem = "PDUDestroyItem";
+        public static readonly string PDUDestruct = "PDUDestruct";
+        public static readonly string PDUDisconnect = "PDUDisconnect";
+        public static readonly string PDUModuleDisconnect = "PDUModuleDisconnect";
+        public static readonly string PDUGetLastError = "PDUGetLastError";
+        public static readonly string PDUDestroyComLogicalLink = "PDUDestroyComLogicalLink";
+        public static readonly string PDUGetUniqueRespIdTable = "PDUGetUniqueRespIdTable";
+        public static readonly string PDUSetUniqueRespIdTable = "PDUSetUniqueRespIdTable";
+
+
     }
     public class PduApiManager
     {
 
         private LoadDll m_loadDll = new LoadDll();
         public IntPtr m_DeviceHandle = IntPtr.Zero;
-        private PConstruct m_PConstructMethod = null;
-        private PDestruct m_PDestructMethod = null;
+        private PConstructDelegate m_PConstructMethod = null;
+        private PRegisterEventCallbackDelegate m_PRegisterEventCallbackMethod = null;
+        private PGetModuleIdsDelegate m_PGetModuleIdsMethod = null;
+        private PModuleConnectDelegate m_PModuleConnectMethod = null;
+        private PGetVersionDelegate m_PGetVersionMethod = null;
+        private PGetResourceIdsDelegate m_PGetResourceIdsMethod = null;
+        private PGetObjectIdDelegate m_PGetObjectIdMethod = null;
+        private PCreateComLogicalLinkDelegate m_PCreateComLogicalLinkMethod = null;
+        private PGetResourceStatusDelegate m_PGetResourceStatusMethod = null;
+        private PConnectDelegate m_PConnectMethod = null;
+        private PIoCtlDelegate m_PIoCtlMethod = null;
+        private PStartComPrimitiveDelegate m_PStartComPrimitiveMethod = null;
+        private PSetComParamDelegate m_PSetComParamMethod = null;
+        private PGetComParamDelegate m_PGetComParamMethod = null;
+        private PGetEventItemDelegate m_PGetEventItemMethod = null;
+        private PDestroyItemDelegate m_PDestroyItemMethod = null;
+        private PDestructDelegate m_PDestructMethod = null;
+        private PDisconnectDelegate m_PDisconnectMethod = null;
+        private PModuleDisconnectDelegate m_PModuleDisconnectMethod = null;
+        private PGetLastErrorDelegate m_PGetLastErrorMethod = null;
+        private PDestroyComLogicalLinkDelegate m_PDestroyComLogicalLinkMethod = null;
+        private PGetUniqueRespIdTableDelegate m_PGetUniqueRespIdTableMethod = null;
+        private PSetUniqueRespIdTableDelegate m_PSetUniqueRespIdTableMethod = null;
 
         public PduApiManager()
         {
@@ -188,107 +234,31 @@ namespace ISOLib.Core
         }
         private void InitMethod()
         {
-
-
-            m_PConstructMethod = (PConstruct)m_loadDll.InvokeMethod(DefineConst.Construct, typeof(PConstruct));
-            m_PDestructMethod = (PDestruct)m_loadDll.InvokeMethod(DefineConst.Destruct, typeof(PDestruct));
-
-
-
+            m_PConstructMethod = (PConstructDelegate)m_loadDll.InvokeMethod(DefineConst.PDUConstruct, typeof(PConstructDelegate));
+            m_PRegisterEventCallbackMethod = (PRegisterEventCallbackDelegate)m_loadDll.InvokeMethod(DefineConst.PDURegisterEventCallback, typeof(PRegisterEventCallbackDelegate));
+            m_PGetModuleIdsMethod = (PGetModuleIdsDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetModuleIds, typeof(PGetModuleIdsDelegate));
+            m_PModuleConnectMethod = (PModuleConnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUModuleConnect, typeof(PModuleConnectDelegate));
+            m_PGetVersionMethod = (PGetVersionDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetVersion, typeof(PGetVersionDelegate));
+            m_PGetResourceIdsMethod = (PGetResourceIdsDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetResourceIds, typeof(PGetResourceIdsDelegate));
+            m_PGetObjectIdMethod = (PGetObjectIdDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetObjectId, typeof(PGetObjectIdDelegate));
+            m_PCreateComLogicalLinkMethod = (PCreateComLogicalLinkDelegate)m_loadDll.InvokeMethod(DefineConst.PDUCreateComLogicalLink, typeof(PCreateComLogicalLinkDelegate));
+            m_PGetResourceStatusMethod = (PGetResourceStatusDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetResourceStatus, typeof(PGetResourceStatusDelegate));
+            m_PConnectMethod = (PConnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUConnect, typeof(PConnectDelegate));
+            m_PIoCtlMethod = (PIoCtlDelegate)m_loadDll.InvokeMethod(DefineConst.PDUIoCtl, typeof(PIoCtlDelegate));
+            m_PStartComPrimitiveMethod = (PStartComPrimitiveDelegate)m_loadDll.InvokeMethod(DefineConst.PDUStartComPrimitive, typeof(PStartComPrimitiveDelegate));
+            m_PSetComParamMethod = (PSetComParamDelegate)m_loadDll.InvokeMethod(DefineConst.PDUSetComParam, typeof(PSetComParamDelegate));
+            m_PGetComParamMethod = (PGetComParamDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetComParam, typeof(PGetComParamDelegate));
+            m_PGetEventItemMethod = (PGetEventItemDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetEventItem, typeof(PGetEventItemDelegate));
+            m_PDestroyItemMethod = (PDestroyItemDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestroyItem, typeof(PDestroyItemDelegate));
+            m_PDestructMethod = (PDestructDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestruct, typeof(PDestructDelegate));
+            m_PDisconnectMethod = (PDisconnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDisconnect, typeof(PDisconnectDelegate));
+            m_PModuleDisconnectMethod = (PModuleDisconnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUModuleDisconnect, typeof(PModuleDisconnectDelegate));
+            m_PGetLastErrorMethod = (PGetLastErrorDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetLastError, typeof(PGetLastErrorDelegate));
+            m_PDestroyComLogicalLinkMethod = (PDestroyComLogicalLinkDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestroyComLogicalLink, typeof(PDestroyComLogicalLinkDelegate));
+            m_PGetUniqueRespIdTableMethod = (PGetUniqueRespIdTableDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetUniqueRespIdTable, typeof(PGetUniqueRespIdTableDelegate));
+            m_PSetUniqueRespIdTableMethod = (PSetUniqueRespIdTableDelegate)m_loadDll.InvokeMethod(DefineConst.PDUSetUniqueRespIdTable, typeof(PSetUniqueRespIdTableDelegate));
 
         }
-
-
-        ////// 定义回调函数委托
-        //public delegate void CALLBACKFNC(IntPtr lpv);
-
-        //// 注册事件回调函数
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PRegisterEventCallback(uint hMod, uint hCLL, CALLBACKFNC callback);
-
-        //// 构造函数
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PConstruct([MarshalAs(UnmanagedType.LPStr)] string lpFileName, IntPtr lpv);
-
-        //// 连接模块
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PModuleConnect(uint hMod);
-
-        //// 获取版本信息
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetVersion(uint hMod, ref PDU_VERSION_DATA pVersionData);
-
-        //// 获取资源 ID
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetResourceIds(uint hMod, PduRscData pResourceIdData, ref PduRscIdItem pResourceIdList);
-
-        //// 获取对象 ID
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetObjectId(T_PDU_OBJT pduObjectType, [MarshalAs(UnmanagedType.LPStr)] string pShortname, ref uint pPduObjectId);
-
-        //// 创建通信逻辑链路
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PCreateComLogicalLink(uint hMod, PDU_RSC_DATA pRscData, uint resourceId, IntPtr pCllTag, ref uint phCLL, PDU_FLAG_DATA pCllCreateFlag);
-
-        //// 获取资源状态
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetResourceStatus(ref PDU_RSC_STATUS_ITEM pResourceStatus);
-
-        //// 连接
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PConnect(uint hMod, uint hCLL);
-
-        //// IO 控制
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PIoCtl(uint hMod, uint hCLL, uint IoCtlCommandId, PDU_DATA_ITEM pInputData, ref PDU_DATA_ITEM pOutputData);
-
-        //// 启动通信原语
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PStartComPrimitive(uint hMod, uint hCLL, T_PDU_COPT CoPType, uint CoPDataSize, byte[] pCoPData, PDU_COP_CTRL_DATA pCopCtrlData, IntPtr pCoPTag, ref uint phCoP);
-
-        //// 设置通信参数
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PSetComParam(uint hMod, uint hCLL, PDU_PARAM_ITEM pParamItem);
-
-        //// 获取通信参数
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetComParam(uint hMod, uint hCLL, uint ParamId, ref PDU_PARAM_ITEM pParamItem);
-
-        //// 获取事件项
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetEventItem(uint hMod, uint hCLL, ref PDU_EVENT_ITEM pEventItem);
-
-        //// 销毁项
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PDestroyItem(PDU_ITEM pItem);
-
-        //// 析构
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PDestruct();
-
-        //// 断开连接
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PDisconnect(uint hMod, uint hCLL);
-
-        //// 模块断开连接
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PModuleDisconnect(uint hMod);
-
-        //// 获取最后一个错误
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetLastError(uint hMod, uint hCLL, ref T_PDU_ERR_EVT pErrorCode, ref uint phCoP, ref uint pTimestamp, ref uint pExtraErrorInfo);
-
-        //// 销毁通信逻辑链路
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PDestroyComLogicalLink(uint hMod, uint hCLL);
-
-        //// 获取唯一响应 ID 表
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PGetUniqueRespIdTable(uint hMod, uint hCLL, ref PDU_UNIQUE_RESP_ID_TABLE_ITEM pUniqueRespIdTable);
-
-        //// 设置唯一响应 ID 表
-        //[DllImport("PDUDll.dll", CallingConvention = CallingConvention.StdCall)]
-        //public static extern uint PSetUniqueRespIdTable(uint hMod, uint hCLL, PDU_UNIQUE_RESP_ID_TABLE_ITEM pUniqueRespIdTable);
 
     }
 }
