@@ -183,6 +183,17 @@ namespace ISOLib.Core
     }
     public class PduApiManager
     {
+        static PduApiManager _instance;
+
+        public static PduApiManager getInstance()
+        {
+            if (_instance==null)
+            {
+                _instance = new PduApiManager();
+            }
+            return _instance;
+        }
+
 
         private LoadDll m_loadDll = new LoadDll();
         public IntPtr m_DeviceHandle = IntPtr.Zero;
@@ -231,6 +242,30 @@ namespace ISOLib.Core
             m_loadDll.UnLoad();
             m_DeviceHandle = IntPtr.Zero;
             m_loadDll.UnLoad();
+
+            m_PConstructMethod = null;
+            m_PRegisterEventCallbackMethod = null;
+            m_PGetModuleIdsMethod = null;
+            m_PModuleConnectMethod = null;
+            m_PGetVersionMethod = null;
+            m_PGetResourceIdsMethod = null;
+            m_PGetObjectIdMethod = null;
+            m_PCreateComLogicalLinkMethod = null;
+            m_PGetResourceStatusMethod = null;
+            m_PConnectMethod = null;
+            m_PIoCtlMethod = null;
+            m_PStartComPrimitiveMethod = null;
+            m_PSetComParamMethod = null;
+            m_PGetComParamMethod = null;
+            m_PGetEventItemMethod = null;
+            m_PDestroyItemMethod = null;
+            m_PDestructMethod = null;
+            m_PDisconnectMethod = null;
+            m_PModuleDisconnectMethod = null;
+            m_PGetLastErrorMethod = null;
+            m_PDestroyComLogicalLinkMethod = null;
+            m_PGetUniqueRespIdTableMethod = null;
+            m_PSetUniqueRespIdTableMethod = null;
         }
         private void InitMethod()
         {
