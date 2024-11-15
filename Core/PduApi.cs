@@ -138,7 +138,7 @@ namespace ISOLib.Core
         ref uint phCLL, PduFlagData pCllCreateFlag);
     public delegate uint PGetResourceStatusDelegate(ref PduRscStatusItem pResourceStatus);
     public delegate uint PConnectDelegate(uint hMod, uint hCLL);
-    public delegate uint PIoCtlDelegate(uint hMod, uint hCLL, uint IoCtlCommandId, ref PduDataItem pInputData, ref IntPtr pOutputData);
+    public delegate uint PIoCtlDelegate(uint hMod, uint hCLL, uint IoCtlCommandId, ref PduDataItem pInputData, IntPtr pOutputData);
     public delegate uint PStartComPrimitiveDelegate(uint hMod, uint hCLL, T_Pdu_Copt CoPType, uint CoPDataSize, byte[] pCoPData,
         PduCopCtrlData  pCopCtrlData, IntPtr pCoPTag, ref uint phCoP);
     public delegate uint PSetComParamDelegate(uint hMod, uint hCLL,PduParamItem  pParamItem);
@@ -228,7 +228,7 @@ namespace ISOLib.Core
             m_DeviceHandle = IntPtr.Zero;
         }
 
-        public int openDevice(string Dllpath)
+        public uint openDevice(string Dllpath)
         {
             m_loadDll.UnLoad();
             m_loadDll.Load(Dllpath);

@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -17,11 +18,23 @@ public class PDUDevice : ITPDevice
         {
             // 初始化代码（如果有的话）
             pduApiManager = PduApiManager.getInstance();
+            this.m_DeviceID =DoipConstants. INVALID_ID;
+            this.DO_loopback = 0;
+            this.DO_testaddress = 0;
+            this.DO_eculogiacladdress = 0;
+            this.DO_ecufunctionaddress = 0;
+            this.DO_ecuipaddress = 0;
+            this.DO_datapins = 0;
+            this.open = false;
         }
 
         ~PDUDevice()
         {
             // 析构代码（如果有的话）
+            if (m_DeviceID != DoipConstants. INVALID_ID)
+            {
+                Close();
+            }
         }
 
         // 实现ITPDevice接口的方法
@@ -44,7 +57,7 @@ public class PDUDevice : ITPDevice
                     PduModuleItem[] ModuleIds=new PduModuleItem [maxArrayLen];
                     var ptr = DefinePtrToStructure.ToIntPtrByArr<PduModuleItem>(ModuleIds);
                     openResult = pduApiManager.m_PGetModuleIdsMethod(ptr);
-                    if (openResult == PduStatus.PDU_STATUS_NOERROR.GetValue() && ModuleIds[0].NumEntrie > 0)
+                    if ( ModuleIds[0].NumEntrie > 0)
                     {
                        var item =  DefinePtrToStructure.PtrToStructureT<PduModuleData>(ModuleIds[0].pModuleData);
 
@@ -82,8 +95,19 @@ public class PDUDevice : ITPDevice
 
         public bool Close()
         {
-            // 实现代码
-            throw new NotImplementedException();
+            bool bReturnValue = false;
+            uint CloseResult =pduApiManager.m_PModuleDisconnectMethod(this.HMod);
+            CloseResult =pduApiManager.m_PDestructMethod();
+            if (CloseResult ==PduStatus.PDU_STATUS_NOERROR.GetValue()|| CloseResult == PduStatus.PDU_ERR_COMM_PC_TO_VCI_FAILED.GetValue() || CloseResult == PduStatus.PDU_ERR_INVALID_HANDLE.GetValue())
+            {
+                if (pduApiManager.Unload() == PduStatus.PDU_STATUS_NOERROR.GetValue())
+                {
+                    bReturnValue = true;
+                }
+            }
+            this.m_DeviceID = DoipConstants.INVALID_ID;
+            this.open = false;
+            return bReturnValue;
         }
 
         public bool Connect(out IntPtr pTPHandle, uint protocolEnum, uint flags, uint baudRate)
@@ -94,8 +118,7 @@ public class PDUDevice : ITPDevice
 
         public bool DisConnect(IntPtr tpHandle)
         {
-            // 实现代码
-            throw new NotImplementedException();
+            return false;
         }
 
         public bool ReadVersion(out string firmwareVersion, out string dllVersion, out string apiVersion)
@@ -106,8 +129,28 @@ public class PDUDevice : ITPDevice
 
         public bool DeviceIOCtrl(uint controlId, IntPtr pInput, IntPtr pOutput)
         {
-            // 实现代码
-            throw new NotImplementedException();
+            //uint Status =PduStatus. PDU_ERR_FCT_FAILED.GetValue();
+            //switch (controlId)
+            //{
+            //    case READ_VBATT:
+            //        Status = this.IOCtrlReadVBATT(out uint output);
+            //        Marshal.WriteIntPtr(pOutput, Marshal.AllocHGlobal(Marshal.SizeOf(typeof(uint))));
+            //        Marshal.StructureToPtr(output, pOutput, false);
+            //        break;
+            //    case Pre_IOCtl:
+            //        Status = this.PreIOCtrlIOCtrl(Marshal.PtrToStructure<SCONFIG_LIST>(pInput));
+            //        break;
+            //    default:
+            //        break;
+            //}
+            //if (Status != PDU_STATUS_NOERROR)
+            //{
+            //    string TmpChar = new string('\0', 128);
+            //    // 这里原本的代码是 char TmpChar[128]，但在C#中我们通常不会这样使用字符串。
+            //    // 你可能需要根据实际情况来处理这个字符串。
+            //    return false;
+            //}
+            return true;
         }
 
         public bool VehicleIdRequest(out IntPtr pTPHandle, uint protocolEnum, out IntPtr handleMod)
@@ -142,15 +185,19 @@ public class PDUDevice : ITPDevice
             uint[] pins = new uint[1];
             pins[0] = 1;
             pInputData2.pData = pins.ToIntPtrByArr(); // PDU_IOCTL_GET_ETH_PIN_OPTION
-            PduDataItem pOutputData = new PduDataItem() ;
-            var pOutputDataPtr = pOutputData.GetIntPtr();
+            //PduDataItem pOutputData = new PduDataItem() ;
+            //var pOutputDataPtr = pOutputData.GetIntPtr();   //会报错  申请的内存小了
+
+            PduDataItem[] pOutputData = new PduDataItem[maxArrayLen];
+            var pOutputDataPtr = DefinePtrToStructure.ToIntPtrByArr<PduDataItem>(pOutputData);
+
             pShortname = "PDU_IOCTL_GET_ETH_PIN_OPTION";
             pduApiManager.m_PGetObjectIdMethod(pduObjectType, pShortname, ref pPduObjectId);
-            RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData2, ref pOutputDataPtr); // PDU_IOCTL_GET_ETH_PIN_OPTION 22
+            RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData2, pOutputDataPtr); // PDU_IOCTL_GET_ETH_PIN_OPTION 22
             if (RetStatus > 0)
             {
                 System.Threading.Thread.Sleep(300);
-                RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData2, ref pOutputDataPtr);
+                RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData2, pOutputDataPtr);
             };
 
             PduDataItem pInputData1 = new PduDataItem();
@@ -160,16 +207,17 @@ public class PDUDevice : ITPDevice
             a1[0].EthernetActPinNumber = 8;
             pInputData1.pData = a1.ToIntPtrByArr();
 
-            PduDataItem pOutputData2 = new PduDataItem();
-            var pOutputDataPtr2 = pOutputData2.GetIntPtr();
+            PduDataItem[] pOutputData2 = new PduDataItem[maxArrayLen];
+            var pOutputDataPtr2 = DefinePtrToStructure.ToIntPtrByArr<PduDataItem>(pOutputData2);
+
             System.Threading.Thread.Sleep(300); // delay 1000
             pShortname = "PDU_IOCTL_ETH_SWITCH_STATE"; // PDU_IOCTL_ETH_SWITCH_STATE PDU_IOCTL_MS_SET_BRIDGE_SWITCH_STATE
             pduApiManager.m_PGetObjectIdMethod(pduObjectType, pShortname, ref pPduObjectId);
-            RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, 19, ref pInputData1, ref pOutputDataPtr2); // PDU_IOCTL_ETH_SWITCH_STATE // 6531:19 VDI-III :19
+            RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, 19, ref pInputData1,  pOutputDataPtr2); // PDU_IOCTL_ETH_SWITCH_STATE // 6531:19 VDI-III :19
             if (RetStatus == PduStatus. PDU_ERR_FCT_FAILED.GetValue())
             {
                 System.Threading.Thread.Sleep(300);
-                RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData1, ref pOutputDataPtr2);
+                RetStatus = pduApiManager.m_PIoCtlMethod(HMod, 0xFFFFFFFF, pPduObjectId, ref pInputData1, pOutputDataPtr2);
             };
 
             return (uint)RetStatus;

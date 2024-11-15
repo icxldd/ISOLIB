@@ -13,7 +13,7 @@ namespace ISOLib.Core
         // 类型定义
         public const byte uint8 = 0xFF; // 示例值，实际使用时不需要赋值
         public const UInt32 UInt32 = 0xFFFFFFFF; // 示例值，实际使用时不需要赋值
-
+        public const UInt32 INVALID_ID = 0xFFFFFFFF;
         // p-pdu api参数
         public const int DOIP_testaddress = 0x20000;
         public const int DOIP_eculogiacladdress = 0x20001;
