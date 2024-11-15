@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ISOLib.Core.Extensions;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -124,7 +125,7 @@ namespace ISOLib.Core
     // 定义回调函数委托
     public delegate void CALLBACKFNC(IntPtr lpv);
 
-    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr pApiTag);
+    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr? pApiTag);
 
     // 定义委托
     public delegate uint PRegisterEventCallbackDelegate(uint hMod, uint hCLL, CALLBACKFNC callback);
@@ -137,13 +138,13 @@ namespace ISOLib.Core
         ref uint phCLL, PduFlagData pCllCreateFlag);
     public delegate uint PGetResourceStatusDelegate(ref PduRscStatusItem pResourceStatus);
     public delegate uint PConnectDelegate(uint hMod, uint hCLL);
-    public delegate uint PIoCtlDelegate(uint hMod, uint hCLL, uint IoCtlCommandId, PduDataItem pInputData, ref PduDataItem pOutputData);
+    public delegate uint PIoCtlDelegate(uint hMod, uint hCLL, uint IoCtlCommandId, ref PduDataItem pInputData, ref IntPtr pOutputData);
     public delegate uint PStartComPrimitiveDelegate(uint hMod, uint hCLL, T_Pdu_Copt CoPType, uint CoPDataSize, byte[] pCoPData,
         PduCopCtrlData  pCopCtrlData, IntPtr pCoPTag, ref uint phCoP);
     public delegate uint PSetComParamDelegate(uint hMod, uint hCLL,PduParamItem  pParamItem);
     public delegate uint PGetComParamDelegate(uint hMod, uint hCLL, uint ParamId, ref PduParamItem pParamItem);
     public delegate uint PGetEventItemDelegate(uint hMod, uint hCLL, ref PduEventItem pEventItem);
-    public delegate uint PDestroyItemDelegate(PduItem pItem);
+    public delegate uint PDestroyItemDelegate(IntPtr pItem);//PduItem
     public delegate uint PDestructDelegate();
     public delegate uint PDisconnectDelegate(uint hMod, uint hCLL);
     public delegate uint PModuleDisconnectDelegate(uint hMod);
@@ -197,29 +198,29 @@ namespace ISOLib.Core
 
         private LoadDll m_loadDll = new LoadDll();
         public IntPtr m_DeviceHandle = IntPtr.Zero;
-        private PConstructDelegate m_PConstructMethod = null;
-        private PRegisterEventCallbackDelegate m_PRegisterEventCallbackMethod = null;
-        private PGetModuleIdsDelegate m_PGetModuleIdsMethod = null;
-        private PModuleConnectDelegate m_PModuleConnectMethod = null;
-        private PGetVersionDelegate m_PGetVersionMethod = null;
-        private PGetResourceIdsDelegate m_PGetResourceIdsMethod = null;
-        private PGetObjectIdDelegate m_PGetObjectIdMethod = null;
-        private PCreateComLogicalLinkDelegate m_PCreateComLogicalLinkMethod = null;
-        private PGetResourceStatusDelegate m_PGetResourceStatusMethod = null;
-        private PConnectDelegate m_PConnectMethod = null;
-        private PIoCtlDelegate m_PIoCtlMethod = null;
-        private PStartComPrimitiveDelegate m_PStartComPrimitiveMethod = null;
-        private PSetComParamDelegate m_PSetComParamMethod = null;
-        private PGetComParamDelegate m_PGetComParamMethod = null;
-        private PGetEventItemDelegate m_PGetEventItemMethod = null;
-        private PDestroyItemDelegate m_PDestroyItemMethod = null;
-        private PDestructDelegate m_PDestructMethod = null;
-        private PDisconnectDelegate m_PDisconnectMethod = null;
-        private PModuleDisconnectDelegate m_PModuleDisconnectMethod = null;
-        private PGetLastErrorDelegate m_PGetLastErrorMethod = null;
-        private PDestroyComLogicalLinkDelegate m_PDestroyComLogicalLinkMethod = null;
-        private PGetUniqueRespIdTableDelegate m_PGetUniqueRespIdTableMethod = null;
-        private PSetUniqueRespIdTableDelegate m_PSetUniqueRespIdTableMethod = null;
+        public PConstructDelegate m_PConstructMethod = null;
+        public PRegisterEventCallbackDelegate m_PRegisterEventCallbackMethod = null;
+        public PGetModuleIdsDelegate m_PGetModuleIdsMethod = null;
+        public PModuleConnectDelegate m_PModuleConnectMethod = null;
+        public PGetVersionDelegate m_PGetVersionMethod = null;
+        public PGetResourceIdsDelegate m_PGetResourceIdsMethod = null;
+        public PGetObjectIdDelegate m_PGetObjectIdMethod = null;
+        public PCreateComLogicalLinkDelegate m_PCreateComLogicalLinkMethod = null;
+        public PGetResourceStatusDelegate m_PGetResourceStatusMethod = null;
+        public PConnectDelegate m_PConnectMethod = null;
+        public PIoCtlDelegate m_PIoCtlMethod = null;
+        public PStartComPrimitiveDelegate m_PStartComPrimitiveMethod = null;
+        public PSetComParamDelegate m_PSetComParamMethod = null;
+        public PGetComParamDelegate m_PGetComParamMethod = null;
+        public PGetEventItemDelegate m_PGetEventItemMethod = null;
+        public PDestroyItemDelegate m_PDestroyItemMethod = null;
+        public PDestructDelegate m_PDestructMethod = null;
+        public PDisconnectDelegate m_PDisconnectMethod = null;
+        public PModuleDisconnectDelegate m_PModuleDisconnectMethod = null;
+        public PGetLastErrorDelegate m_PGetLastErrorMethod = null;
+        public PDestroyComLogicalLinkDelegate m_PDestroyComLogicalLinkMethod = null;
+        public PGetUniqueRespIdTableDelegate m_PGetUniqueRespIdTableMethod = null;
+        public PSetUniqueRespIdTableDelegate m_PSetUniqueRespIdTableMethod = null;
 
         public PduApiManager()
         {
@@ -227,16 +228,16 @@ namespace ISOLib.Core
             m_DeviceHandle = IntPtr.Zero;
         }
 
-        public IntPtr openDevice(string deviceName, string Dllpath)
+        public int openDevice(string Dllpath)
         {
             m_loadDll.UnLoad();
             m_loadDll.Load(Dllpath);
 
             m_DeviceHandle = m_loadDll.GethDllLib();
             InitMethod();
-            return m_DeviceHandle;
+            return PduStatus.PDU_STATUS_NOERROR.GetValue();
         }
-        public void Unload()
+        public UInt32 Unload()
         {
 
             m_loadDll.UnLoad();
@@ -266,6 +267,7 @@ namespace ISOLib.Core
             m_PDestroyComLogicalLinkMethod = null;
             m_PGetUniqueRespIdTableMethod = null;
             m_PSetUniqueRespIdTableMethod = null;
+            return PduStatus.PDU_STATUS_NOERROR.GetValue();
         }
         private void InitMethod()
         {
