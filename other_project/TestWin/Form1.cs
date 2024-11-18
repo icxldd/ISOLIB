@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ISOLib.Core;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -20,7 +21,10 @@ namespace TestWin
 
         private void button1_Click(object sender, EventArgs e)
         {
-            lala();
+            //lala();
+
+            PDUDevice pDUDevice = new PDUDevice();
+            pDUDevice.Open("C:\\Program Files (x86)\\Bosch\\VTX-VCI\\VCI Software (6531-Bosch)\\Products\\6531-Bosch\\DoIP\\PDUAPI_Bosch.dll");
         }
 
         public enum T_PDU_IT
@@ -65,7 +69,7 @@ namespace TestWin
  
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void HelloWord(ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3,PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
+        public static extern void HelloWord( IntPtr intPtr,ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3,PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
 
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
@@ -100,8 +104,10 @@ namespace TestWin
 
             // 调用 C++ 函数
             //HelloWord(item.GetIntPtr(), new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
+            PDU_RSC_STATUS_ITEM[] ModuleIds = new PDU_RSC_STATUS_ITEM[5];
 
-            HelloWord(ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
+            var ptr = DefinePtrToStructure.ToIntPtrByArr<PDU_RSC_STATUS_ITEM>(ModuleIds);
+            HelloWord(ptr.GetIntPtr(),ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
             HelloWord2(13);
 
         }

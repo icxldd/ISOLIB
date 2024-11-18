@@ -11,7 +11,7 @@ namespace ISOLib.Core
 
 public class PDUDevice : ITPDevice
     {
-        private int maxArrayLen = int.MaxValue;
+        private int maxArrayLen = 65536;
         private PduApiManager pduApiManager;
         // 类的构造函数和析构函数
         public PDUDevice()
@@ -47,15 +47,15 @@ public class PDUDevice : ITPDevice
                 uint openResult = PduStatus.PDU_STATUS_NOERROR.GetValue();
                 try
                 {
-                    openResult =pduApiManager.m_PConstructMethod(null, null);
+                    openResult =pduApiManager.m_PConstructMethod(null, IntPtr.Zero);
                     if (openResult == PduStatus.PDU_ERR_SHARING_VIOLATION.GetValue())
                     {
                         pduApiManager.m_PDestructMethod();
-                        pduApiManager.m_PConstructMethod(null, null);
+                        pduApiManager.m_PConstructMethod(null, IntPtr.Zero);
                     }
                     pduApiManager.m_PRegisterEventCallbackMethod(0xFFFFFFFF, 0xFFFFFFFF, null);
-                    PduModuleItem[] ModuleIds=new PduModuleItem [maxArrayLen];
-                    var ptr = DefinePtrToStructure.ToIntPtrByArr<PduModuleItem>(ModuleIds);
+                    PduModuleItem[] ModuleIds=new PduModuleItem [5];
+                    var ptr = DefinePtrToStructure.ToIntPtrByArr<PduModuleItem>(ModuleIds).GetIntPtr();
                     openResult = pduApiManager.m_PGetModuleIdsMethod(ptr);
                     if ( ModuleIds[0].NumEntrie > 0)
                     {
@@ -115,7 +115,7 @@ public class PDUDevice : ITPDevice
             // 实现代码
             throw new NotImplementedException();
         }
-
+        
         public bool DisConnect(IntPtr tpHandle)
         {
             return false;

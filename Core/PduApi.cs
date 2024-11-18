@@ -125,7 +125,7 @@ namespace ISOLib.Core
     // 定义回调函数委托
     public delegate void CALLBACKFNC(IntPtr lpv);
 
-    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr? pApiTag);
+    public delegate uint PConstructDelegate([MarshalAs(UnmanagedType.LPStr)] string optionStr, IntPtr pApiTag);
 
     // 定义委托
     public delegate uint PRegisterEventCallbackDelegate(uint hMod, uint hCLL, CALLBACKFNC callback);
@@ -271,6 +271,7 @@ namespace ISOLib.Core
         }
         private void InitMethod()
         {
+            m_PDestructMethod = (PDestructDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestruct, typeof(PDestructDelegate));
             m_PConstructMethod = (PConstructDelegate)m_loadDll.InvokeMethod(DefineConst.PDUConstruct, typeof(PConstructDelegate));
             m_PRegisterEventCallbackMethod = (PRegisterEventCallbackDelegate)m_loadDll.InvokeMethod(DefineConst.PDURegisterEventCallback, typeof(PRegisterEventCallbackDelegate));
             m_PGetModuleIdsMethod = (PGetModuleIdsDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetModuleIds, typeof(PGetModuleIdsDelegate));
@@ -287,7 +288,6 @@ namespace ISOLib.Core
             m_PGetComParamMethod = (PGetComParamDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetComParam, typeof(PGetComParamDelegate));
             m_PGetEventItemMethod = (PGetEventItemDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetEventItem, typeof(PGetEventItemDelegate));
             m_PDestroyItemMethod = (PDestroyItemDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestroyItem, typeof(PDestroyItemDelegate));
-            m_PDestructMethod = (PDestructDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDestruct, typeof(PDestructDelegate));
             m_PDisconnectMethod = (PDisconnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUDisconnect, typeof(PDisconnectDelegate));
             m_PModuleDisconnectMethod = (PModuleDisconnectDelegate)m_loadDll.InvokeMethod(DefineConst.PDUModuleDisconnect, typeof(PModuleDisconnectDelegate));
             m_PGetLastErrorMethod = (PGetLastErrorDelegate)m_loadDll.InvokeMethod(DefineConst.PDUGetLastError, typeof(PGetLastErrorDelegate));

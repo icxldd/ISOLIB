@@ -42,7 +42,7 @@ typedef struct {
 } PDU_RSC_STATUS_ITEM;
 
 extern "C" {
-    PDUDLL_API void HelloWord(PDU_RSC_STATUS_ITEM* pItem, UINT8 * p2,ULONG *p3, PDU_RSC_STATUS_DATA P4,char* name);
+    PDUDLL_API void HelloWord(PDU_RSC_STATUS_ITEM** pItems, PDU_RSC_STATUS_ITEM* pItem, UINT8 * p2,ULONG *p3, PDU_RSC_STATUS_DATA P4,char* name);
 
 
 
