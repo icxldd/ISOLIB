@@ -143,7 +143,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
 
     // 初始化Windows网络套接字
     if (!InitializeWinsock()) {
-        OutputDebugStringA("Winsock初始化失败");
+        //OutputDebugStringA("Winsock初始化失败");
         return NTP_ERROR_NETWORK;
     }
 
@@ -151,7 +151,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         // 创建UDP网络套接字
         sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
         if (sock == INVALID_SOCKET) {
-            OutputDebugStringA("网络套接字创建失败");
+            //OutputDebugStringA("网络套接字创建失败");
             break;
         }
 
@@ -173,7 +173,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
             if (!host) {
                 char debugMsg[256];
                 sprintf_s(debugMsg, sizeof(debugMsg), "域名解析失败: %s", server);
-                OutputDebugStringA(debugMsg);
+                //OutputDebugStringA(debugMsg);
                 result = NTP_ERROR_NETWORK;
                 break;
             }
@@ -190,7 +190,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
 
         // 发送NTP时间请求到服务器
         if (sendto(sock, (char*)&packet, sizeof(packet), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
-            OutputDebugStringA("NTP请求发送失败");
+            //OutputDebugStringA("NTP请求发送失败");
             result = NTP_ERROR_NETWORK;
             break;
         }
@@ -203,24 +203,24 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         if (bytesReceived == SOCKET_ERROR) {
             int error = WSAGetLastError();
             if (error == WSAETIMEDOUT) {
-                OutputDebugStringA("NTP请求超时");
+                //OutputDebugStringA("NTP请求超时");
                 result = NTP_ERROR_TIMEOUT;
             } else {
-                OutputDebugStringA("NTP响应接收失败");
+                //OutputDebugStringA("NTP响应接收失败");
                 result = NTP_ERROR_NETWORK;
             }
             break;
         }
 
         if (bytesReceived != sizeof(packet)) {
-            OutputDebugStringA("NTP响应数据包大小无效");
+            //OutputDebugStringA("NTP响应数据包大小无效");
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
 
         // 验证NTP响应数据包的有效性
         if ((packet.li_vn_mode & 0x07) != 4) { // Mode字段应该是4（服务器模式）
-            OutputDebugStringA("NTP响应模式无效");
+            //OutputDebugStringA("NTP响应模式无效");
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
@@ -230,7 +230,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         
         // 验证时间戳的合理性
         if (serverTime == 0) {
-            OutputDebugStringA("服务器返回零时间戳");
+            //OutputDebugStringA("服务器返回零时间戳");
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
@@ -239,7 +239,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         if (serverTime < NTP_UNIX_EPOCH_OFFSET) {
             char debugMsg[256];
             sprintf_s(debugMsg, sizeof(debugMsg), "NTP时间戳无效: %I64d (数值过小)", serverTime);
-            OutputDebugStringA(debugMsg);
+            //OutputDebugStringA(debugMsg);
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
@@ -250,14 +250,14 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         if (*timestamp < 946684800) { // 2000年1月1日的Unix时间戳
             char debugMsg[256];
             sprintf_s(debugMsg, sizeof(debugMsg), "转换后时间戳过旧: %I64d", *timestamp);
-            OutputDebugStringA(debugMsg);
+            //OutputDebugStringA(debugMsg);
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
         
         char debugMsg[256];
         sprintf_s(debugMsg, sizeof(debugMsg), "NTP同步成功 服务器: %s, NTP时间: %I64d, Unix时间戳: %I64d", server, serverTime, *timestamp);
-        OutputDebugStringA(debugMsg);
+        //OutputDebugStringA(debugMsg);
         
         result = NTP_SUCCESS;
 
@@ -280,19 +280,19 @@ int __cdecl GetNTPTimestamp(timestamp_t* timestamp) {
 
     const int serverCount = sizeof(NTP_SERVERS) / sizeof(NTP_SERVERS[0]);
     
-    OutputDebugStringA("开始NTP网络时间同步...");
+    //OutputDebugStringA("开始NTP网络时间同步...");
     
     // 按优先级轮询服务器列表
     for (int i = 0; i < serverCount; i++) {
         char debugMsg[256];
         sprintf_s(debugMsg, sizeof(debugMsg), "尝试NTP服务器: %s (%d/%d)", NTP_SERVERS[i], i + 1, serverCount);
-        OutputDebugStringA(debugMsg);
+        //OutputDebugStringA(debugMsg);
         
         int result = GetNTPTimestampFromServer(NTP_SERVERS[i], timestamp, 3000); // 3秒超时
         
         if (result == NTP_SUCCESS) {
             sprintf_s(debugMsg, sizeof(debugMsg), "NTP时间同步成功，服务器: %s", NTP_SERVERS[i]);
-            OutputDebugStringA(debugMsg);
+            //OutputDebugStringA(debugMsg);
             return NTP_SUCCESS;
         }
         
@@ -305,17 +305,17 @@ int __cdecl GetNTPTimestamp(timestamp_t* timestamp) {
         }
         
         sprintf_s(debugMsg, sizeof(debugMsg), "NTP服务器 %s 失败: %s", NTP_SERVERS[i], errorMsg);
-        OutputDebugStringA(debugMsg);
+        //OutputDebugStringA(debugMsg);
     }
     
-    OutputDebugStringA("所有NTP服务器均失败，使用本地系统时间作为备用方案");
+    //OutputDebugStringA("所有NTP服务器均失败，使用本地系统时间作为备用方案");
     
     // 所有NTP服务器都失败时，使用本地时间作为备用方案
     *timestamp = GetLocalTimestamp();
     
     char debugMsg[256];
     sprintf_s(debugMsg, sizeof(debugMsg), "使用本地时间戳作为备用: %I64d", *timestamp);
-    OutputDebugStringA(debugMsg);
+    //OutputDebugStringA(debugMsg);
     
     return NTP_ERROR_ALL_SERVERS_FAILED;
 }

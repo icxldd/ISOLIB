@@ -270,27 +270,27 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     // 打开输入文件
     fopen_s(&inputFile, filePath, "rb");
     if (!inputFile) {
-        OutputDebugStringA("输入文件打开失败");
+        OutputDebugString(L"输入文件打开失败");
         return ERR_FILE_OPEN_FAILED;
     }
 
     // 读取并验证文件头（早期格式检测）
     if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
-        OutputDebugStringA("文件头读取失败 - 文件太小或已损坏");
+        OutputDebugString(L"文件头读取失败 - 文件太小或已损坏");
         fclose(inputFile);
         return ERR_INVALID_HEADER;
     }
 
     header[MAGIC_HEADER_SIZE] = '\0';
     if (strcmp(header, MAGIC_HEADER) != 0) {
-        OutputDebugStringA("无效文件格式 - 不是加密文件或版本错误");
+        //OutputDebugString(L"无效文件格式 - 不是加密文件或版本错误");
         fclose(inputFile);
         return ERR_INVALID_HEADER;
     }
 
     // 读取存储的密钥长度
     if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
-        OutputDebugStringA("密钥长度读取失败");
+        OutputDebugString(L"密钥长度读取失败");
         fclose(inputFile);
         return ERR_INVALID_HEADER;
     }
