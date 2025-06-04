@@ -33,10 +33,10 @@ extern "C" {
     // server：NTP服务器地址（如：cn.pool.ntp.org）
     // timestamp：输出参数，用于存储获取到的时间戳
     // timeoutMs：网络超时时间（毫秒）
-    PDUDLL_API int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp, int timeoutMs);
+    int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp, int timeoutMs);
     
     // 获取本地系统时间戳（备用方案，当NTP失败时使用）
     // 返回值：本地Unix时间戳
-    PDUDLL_API timestamp_t __cdecl GetLocalTimestamp();
+    timestamp_t __cdecl GetLocalTimestamp();
 }
 
