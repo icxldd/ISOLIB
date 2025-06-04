@@ -1,6 +1,22 @@
-﻿D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(517,5): warning MSB8004: Output 目录未以斜杠结尾。  此生成实例将添加斜杠，因为必须有这个斜杠才能正确计算 Output 目录。
+﻿D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(520,5): warning MSB8004: Output 目录未以斜杠结尾。  此生成实例将添加斜杠，因为必须有这个斜杠才能正确计算 Output 目录。
   pch.cpp
   dllmain.cpp
+  encode.cpp
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(141,5): warning C4273: “StreamEncryptFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(13,17):
+      参见“StreamEncryptFile”的前一个定义
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(240,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(14,17):
+      参见“StreamDecryptFile”的前一个定义
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(383,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(15,17):
+      参见“ValidateEncryptedFile”的前一个定义
+  
   Pduapi.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\Pduapi.cpp(6,6): warning C4273: “HelloWord”: dll 链接不一致
   (编译源文件“/Pduapi.cpp”)

@@ -18,13 +18,55 @@ namespace TestWin
         {
             InitializeComponent();
         }
-
+        //加密
         private void button1_Click(object sender, EventArgs e)
         {
-            lala();
+            try
+            {
+                string inputFile = textBox1.Text;
+                if (string.IsNullOrEmpty(inputFile))
+                {
+                    MessageBox.Show("请选择要加密的文件！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
 
-            //PDUDevice pDUDevice = new PDUDevice();
-            //pDUDevice.Open("C:\\Program Files (x86)\\Bosch\\VTX-VCI\\VCI Software (6531-Bosch)\\Products\\6531-Bosch\\DoIP\\PDUAPI_Bosch.dll");
+                // 根据inputFile同目录生成加密文件路径
+                string directory = System.IO.Path.GetDirectoryName(inputFile);
+                string fileName = System.IO.Path.GetFileNameWithoutExtension(inputFile);
+                string extension = System.IO.Path.GetExtension(inputFile);
+                string encryptedFile = System.IO.Path.Combine(directory, fileName + extension + ".encrypted");
+
+                string key = textBox2.Text;
+                if (string.IsNullOrEmpty(key))
+                {
+                    MessageBox.Show("请输入密钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 检查输入文件是否存在
+                if (!System.IO.File.Exists(inputFile))
+                {
+                    MessageBox.Show("输入文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 加密文件
+                int result = StreamEncryptFile(inputFile, encryptedFile, key);
+                if (result == 0)
+                {
+                    MessageBox.Show($"文件加密成功！\n加密文件保存在：{encryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show($"文件加密失败！错误码: {result}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"加密过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+
+            lala();
         }
 
         public enum T_PDU_IT
@@ -95,101 +137,131 @@ namespace TestWin
 
         static void lala()
         {
-            // 测试加密解密功能
-            TestCryptoFunctions();
+            // 原来的测试代码已移动到三个按钮的点击事件中
+            // TestCryptoFunctions();
 
             //// 创建 PDU_RSC_STATUS_ITEM 结构体实例
-            //PDU_RSC_STATUS_DATA data;
-            //data.hMod = 1;
-            //data.ResourceId = 2;
-           
-            //data.ResourceStatus = 4;
-
-            //PDU_RSC_STATUS_ITEM item = new PDU_RSC_STATUS_ITEM();
-            //item.ItemType = T_PDU_IT.PDU_IT_RSC_STATUS;
-            //item.NumEntries = 2;
-            //item.name = "hhhhh";
-            //item.pResourceStatusData = data;
-
-            //IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(item));
-            //Marshal.StructureToPtr(item, pItemPtr, false);
-
-            ////// 创建 PDU_RSC_STATUS_DATA 数组并初始化
-            ////item.pResourceStatusData = new PDU_RSC_STATUS_DATA[item.NumEntries];
-            ////for (int i = 0; i < item.NumEntries; ++i)
-            ////{
-            ////    item.pResourceStatusData[i].hMod = (uint)i;
-            ////    item.pResourceStatusData[i].ResourceId = (uint)i;
-            ////    item.pResourceStatusData[i].ResourceStatus = (uint)i;
-            ////}
-
-            //// 调用 C++ 函数
-            ////HelloWord(item.GetIntPtr(), new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
-            //PDU_RSC_STATUS_ITEM[] ModuleIds = new PDU_RSC_STATUS_ITEM[5];
-
-            //var ptr = DefinePtrToStructure.ToIntPtrByArr<PDU_RSC_STATUS_ITEM>(ModuleIds);
-            //HelloWord(ptr.GetIntPtr(),ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
-            //HelloWord2(13);
-
         }
 
-        // 测试加密解密功能的示例方法
-        static void TestCryptoFunctions()
+        // 获取错误消息的辅助方法
+        private static string GetErrorMessage(int errorCode)
+        {
+            switch (errorCode)
+            {
+                case 0: return "成功";
+                case -1: return "文件打开失败";
+                case -2: return "内存分配失败";
+                case -3: return "加密失败";
+                case -4: return "解密失败";
+                case -5: return "无效文件头";
+                case -6: return "线程创建失败";
+                default: return "未知错误";
+            }
+        }
+
+        //解密
+        private void button2_Click(object sender, EventArgs e)
         {
             try
             {
-                string inputFile = @"C:\temp\test.txt";
-                string encryptedFile = @"C:\temp\test.encrypted";
-                string decryptedFile = @"C:\temp\test_decrypted.txt";
-                string key = "MySecretPassword123";
-
-                // 加密文件
-                int result = StreamEncryptFile(inputFile, encryptedFile, key);
-                if (result == 0)
+                string inputFile = textBox1.Text;
+                if (string.IsNullOrEmpty(inputFile))
                 {
-                    Console.WriteLine("文件加密成功");
-                    
-                    // 验证加密文件
-                    int isValid = ValidateEncryptedFile(encryptedFile, key);
-                    if (isValid == 1)
-                    {
-                        Console.WriteLine("加密文件验证成功");
-                        
-                        // 解密文件
-                        result = StreamDecryptFile(encryptedFile, decryptedFile, key);
-                        if (result == 0)
-                        {
-                            Console.WriteLine("文件解密成功");
-                        }
-                        else
-                        {
-                            Console.WriteLine($"文件解密失败，错误码: {result}");
-                        }
-                    }
-                    else
-                    {
-                        Console.WriteLine("加密文件验证失败");
-                    }
+                    MessageBox.Show("请选择要解密的文件！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                string key = textBox2.Text;
+                if (string.IsNullOrEmpty(key))
+                {
+                    MessageBox.Show("请输入密钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 检查输入文件是否存在
+                if (!System.IO.File.Exists(inputFile))
+                {
+                    MessageBox.Show("输入文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 生成解密后的文件路径
+                string directory = System.IO.Path.GetDirectoryName(inputFile);
+                string fileName = System.IO.Path.GetFileName(inputFile);
+                string decryptedFile;
+
+                // 如果是.encrypted文件，则去掉.encrypted后缀
+                if (fileName.EndsWith(".encrypted"))
+                {
+                    decryptedFile = System.IO.Path.Combine(directory, fileName.Substring(0, fileName.Length - 10)); // 去掉".encrypted"
                 }
                 else
                 {
-                    Console.WriteLine($"文件加密失败，错误码: {result}");
+                    // 如果不是.encrypted文件，添加_decrypted后缀
+                    string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(inputFile);
+                    string extension = System.IO.Path.GetExtension(inputFile);
+                    decryptedFile = System.IO.Path.Combine(directory, fileNameWithoutExt + "_decrypted" + extension);
+                }
+
+                // 解密文件
+                int result = StreamDecryptFile(inputFile, decryptedFile, key);
+                if (result == 0)
+                {
+                    MessageBox.Show($"文件解密成功！\n解密文件保存在：{decryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    string errorMsg = GetErrorMessage(result);
+                    MessageBox.Show($"文件解密失败！\n错误: {errorMsg} (错误码: {result})", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"调用加密函数时发生异常: {ex.Message}");
+                MessageBox.Show($"解密过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
-        private void button2_Click(object sender, EventArgs e)
-        {
-
-        }
-
+        //验证文件是否有效加密文件
         private void button3_Click(object sender, EventArgs e)
         {
+            try
+            {
+                string inputFile = textBox1.Text;
+                if (string.IsNullOrEmpty(inputFile))
+                {
+                    MessageBox.Show("请选择要验证的文件！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
 
+                string key = textBox2.Text;
+                if (string.IsNullOrEmpty(key))
+                {
+                    MessageBox.Show("请输入密钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 检查输入文件是否存在
+                if (!System.IO.File.Exists(inputFile))
+                {
+                    MessageBox.Show("输入文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // 验证加密文件
+                int result = ValidateEncryptedFile(inputFile, key);
+                if (result == 1)
+                {
+                    MessageBox.Show("文件验证成功！\n这是一个有效的加密文件，并且密钥正确。", "验证成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show("文件验证失败！\n可能的原因：\n1. 这不是一个加密文件\n2. 文件已损坏\n3. 密钥错误", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"验证过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 
