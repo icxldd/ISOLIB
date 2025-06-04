@@ -145,6 +145,19 @@ namespace TestWin
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
             [MarshalAs(UnmanagedType.LPStr)] string key);
 
+        // NTP时间同步函数声明 - x86兼容版本
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int GetNTPTimestamp(out long timestamp);
+
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int GetNTPTimestampFromServer(
+            [MarshalAs(UnmanagedType.LPStr)] string server, 
+            out long timestamp, 
+            int timeoutMs);
+
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern long GetLocalTimestamp();
+
         // 进度回调方法 - 改为实例方法，支持UI线程安全更新
         private void OnProgress(string filePath, double progress)
         {
@@ -307,6 +320,9 @@ namespace TestWin
         {
             try
             {
+                // 先测试NTP时间同步
+                TestNTPSync();
+                
                 // 创建文件选择对话框
                 OpenFileDialog openFileDialog = new OpenFileDialog();
 
@@ -330,8 +346,101 @@ namespace TestWin
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"选择文件时发生错误：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show($"操作过程中发生错误：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        // 测试NTP时间同步
+        private void TestNTPSync()
+        {
+            try
+            {
+                richTextBox1.AppendText("=== NTP时间同步测试 ===\r\n");
+                
+                long timestamp;
+                int result = GetNTPTimestamp(out timestamp);
+                
+                if (result == 0) // NTP_SUCCESS
+                {
+                    // 转换为可读的时间格式
+                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
+                    DateTime localTime = utcTime.ToLocalTime();
+                    
+                    richTextBox1.AppendText($"NTP同步成功！\r\n");
+                    richTextBox1.AppendText($"Unix时间戳: {timestamp}\r\n");
+                    richTextBox1.AppendText($"UTC时间: {utcTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    richTextBox1.AppendText($"本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                }
+                else
+                {
+                    string errorMsg = GetNTPErrorMessage(result);
+                    richTextBox1.AppendText($"NTP同步失败: {errorMsg} (错误码: {result})\r\n");
+                    
+                    // 显示本地时间作为备用
+                    long localTimestamp = GetLocalTimestamp();
+                    DateTime localTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTimestamp).ToLocalTime();
+                    richTextBox1.AppendText($"使用本地时间: {localTimestamp} ({localTime:yyyy-MM-dd HH:mm:ss})\r\n");
+                }
+                
+                richTextBox1.AppendText("\r\n");
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"NTP测试异常: {ex.Message}\r\n");
+            }
+        }
+
+        // 测试指定服务器NTP同步
+        private void TestNTPSyncFromServer(string server)
+        {
+            try
+            {
+                richTextBox1.AppendText($"=== 测试服务器: {server} ===\r\n");
+                
+                long timestamp;
+                int result = GetNTPTimestampFromServer(server, out timestamp, 5000); // 5秒超时
+                
+                if (result == 0) // NTP_SUCCESS
+                {
+                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
+                    DateTime localTime = utcTime.ToLocalTime();
+                    
+                    richTextBox1.AppendText($"服务器 {server} 同步成功！\r\n");
+                    richTextBox1.AppendText($"时间戳: {timestamp}, 时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                }
+                else
+                {
+                    string errorMsg = GetNTPErrorMessage(result);
+                    richTextBox1.AppendText($"服务器 {server} 同步失败: {errorMsg}\r\n");
+                }
+                
+                richTextBox1.AppendText("\r\n");
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"测试服务器异常: {ex.Message}\r\n");
+            }
+        }
+
+        // 获取NTP错误消息
+        private string GetNTPErrorMessage(int errorCode)
+        {
+            switch (errorCode)
+            {
+                case 0: return "成功";
+                case -1: return "网络错误";
+                case -2: return "请求超时";
+                case -3: return "无效响应";
+                case -4: return "所有服务器失败";
+                default: return "未知错误";
+            }
+        }
+
+        private void button5_Click(object sender, EventArgs e)
+        {
+            var  oi = GetNTPTimestamp(out var time);
+
+            richTextBox1.AppendText($"{time}");
         }
     }
 
