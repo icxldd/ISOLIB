@@ -1,12 +1,34 @@
-﻿  pch.cpp
-  dllmain.cpp
-  Pduapi.cpp
-D:\work\code\ISOLib\other_project\TestExportLib\Pduapi.cpp(6,6): warning C4273: “HelloWord”: dll 链接不一致
-  (编译源文件“/Pduapi.cpp”)
-      D:\work\code\ISOLib\other_project\TestExportLib\Pduapi.h(43,21):
-      参见“HelloWord”的前一个定义
+﻿  encode.cpp
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(141,5): warning C4273: “StreamEncryptFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(13,17):
+      参见“StreamEncryptFile”的前一个定义
   
-  正在生成代码...
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(146,19): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(211,27): warning C4267: “+=”: 从“size_t”转换到“long”，可能丢失数据
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(240,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(14,17):
+      参见“StreamDecryptFile”的前一个定义
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(247,19): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(357,27): warning C4267: “+=”: 从“size_t”转换到“long”，可能丢失数据
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(383,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(15,17):
+      参见“ValidateEncryptedFile”的前一个定义
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(388,19): warning C4267: “初始化”: 从“size_t”转换到“int”，可能丢失数据
+  (编译源文件“/encode.cpp”)
+  
     正在创建库 D:\work\code\ISOLib\x64\Debug\TestExportLib.lib 和对象 D:\work\code\ISOLib\x64\Debug\TestExportLib.exp
   TestExportLib.vcxproj -> D:\work\code\ISOLib\x64\Debug\TestExportLib.dll
   'pwsh.exe' 不是内部或外部命令，也不是可运行的程序

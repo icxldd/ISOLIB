@@ -21,10 +21,10 @@ namespace TestWin
 
         private void button1_Click(object sender, EventArgs e)
         {
-            //lala();
+            lala();
 
-            PDUDevice pDUDevice = new PDUDevice();
-            pDUDevice.Open("C:\\Program Files (x86)\\Bosch\\VTX-VCI\\VCI Software (6531-Bosch)\\Products\\6531-Bosch\\DoIP\\PDUAPI_Bosch.dll");
+            //PDUDevice pDUDevice = new PDUDevice();
+            //pDUDevice.Open("C:\\Program Files (x86)\\Bosch\\VTX-VCI\\VCI Software (6531-Bosch)\\Products\\6531-Bosch\\DoIP\\PDUAPI_Bosch.dll");
         }
 
         public enum T_PDU_IT
@@ -75,40 +75,43 @@ namespace TestWin
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern void HelloWord2(UInt32 hh);
 
+
+
+
         static void lala()
         {
-            // 创建 PDU_RSC_STATUS_ITEM 结构体实例
-            PDU_RSC_STATUS_DATA data;
-            data.hMod = 1;
-            data.ResourceId = 2;
+            //// 创建 PDU_RSC_STATUS_ITEM 结构体实例
+            //PDU_RSC_STATUS_DATA data;
+            //data.hMod = 1;
+            //data.ResourceId = 2;
            
-            data.ResourceStatus = 4;
+            //data.ResourceStatus = 4;
 
-            PDU_RSC_STATUS_ITEM item = new PDU_RSC_STATUS_ITEM();
-            item.ItemType = T_PDU_IT.PDU_IT_RSC_STATUS;
-            item.NumEntries = 2;
-            item.name = "hhhhh";
-            item.pResourceStatusData = data;
+            //PDU_RSC_STATUS_ITEM item = new PDU_RSC_STATUS_ITEM();
+            //item.ItemType = T_PDU_IT.PDU_IT_RSC_STATUS;
+            //item.NumEntries = 2;
+            //item.name = "hhhhh";
+            //item.pResourceStatusData = data;
 
-            IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(item));
-            Marshal.StructureToPtr(item, pItemPtr, false);
+            //IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(item));
+            //Marshal.StructureToPtr(item, pItemPtr, false);
 
-            //// 创建 PDU_RSC_STATUS_DATA 数组并初始化
-            //item.pResourceStatusData = new PDU_RSC_STATUS_DATA[item.NumEntries];
-            //for (int i = 0; i < item.NumEntries; ++i)
-            //{
-            //    item.pResourceStatusData[i].hMod = (uint)i;
-            //    item.pResourceStatusData[i].ResourceId = (uint)i;
-            //    item.pResourceStatusData[i].ResourceStatus = (uint)i;
-            //}
+            ////// 创建 PDU_RSC_STATUS_DATA 数组并初始化
+            ////item.pResourceStatusData = new PDU_RSC_STATUS_DATA[item.NumEntries];
+            ////for (int i = 0; i < item.NumEntries; ++i)
+            ////{
+            ////    item.pResourceStatusData[i].hMod = (uint)i;
+            ////    item.pResourceStatusData[i].ResourceId = (uint)i;
+            ////    item.pResourceStatusData[i].ResourceStatus = (uint)i;
+            ////}
 
-            // 调用 C++ 函数
-            //HelloWord(item.GetIntPtr(), new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
-            PDU_RSC_STATUS_ITEM[] ModuleIds = new PDU_RSC_STATUS_ITEM[5];
+            //// 调用 C++ 函数
+            ////HelloWord(item.GetIntPtr(), new byte[] { 1,2,3,0x12,11 },new UInt32[] { 1,23,4,5,2,1,1}, data,"啊啊啊");
+            //PDU_RSC_STATUS_ITEM[] ModuleIds = new PDU_RSC_STATUS_ITEM[5];
 
-            var ptr = DefinePtrToStructure.ToIntPtrByArr<PDU_RSC_STATUS_ITEM>(ModuleIds);
-            HelloWord(ptr.GetIntPtr(),ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
-            HelloWord2(13);
+            //var ptr = DefinePtrToStructure.ToIntPtrByArr<PDU_RSC_STATUS_ITEM>(ModuleIds);
+            //HelloWord(ptr.GetIntPtr(),ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
+            //HelloWord2(13);
 
         }
     }

@@ -2,6 +2,8 @@
 node_modules
 /dist
 /Debug
+x64
+/x64
 vue.config.js
 obj
 bin
