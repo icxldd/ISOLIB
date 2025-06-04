@@ -75,11 +75,29 @@ namespace TestWin
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern void HelloWord2(UInt32 hh);
 
+        // 加密解密函数声明
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int StreamEncryptFile(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath, 
+            [MarshalAs(UnmanagedType.LPStr)] string key);
 
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int StreamDecryptFile(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath, 
+            [MarshalAs(UnmanagedType.LPStr)] string key);
 
+        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
+        public static extern int ValidateEncryptedFile(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
+            [MarshalAs(UnmanagedType.LPStr)] string key);
 
         static void lala()
         {
+            // 测试加密解密功能
+            TestCryptoFunctions();
+
             //// 创建 PDU_RSC_STATUS_ITEM 结构体实例
             //PDU_RSC_STATUS_DATA data;
             //data.hMod = 1;
@@ -112,6 +130,65 @@ namespace TestWin
             //var ptr = DefinePtrToStructure.ToIntPtrByArr<PDU_RSC_STATUS_ITEM>(ModuleIds);
             //HelloWord(ptr.GetIntPtr(),ref item, new byte[] { 1, 2, 3, 0x12, 11 }, new UInt32[] { 1, 23, 4, 5, 2, 1, 1 }, data, "啊啊啊");
             //HelloWord2(13);
+
+        }
+
+        // 测试加密解密功能的示例方法
+        static void TestCryptoFunctions()
+        {
+            try
+            {
+                string inputFile = @"C:\temp\test.txt";
+                string encryptedFile = @"C:\temp\test.encrypted";
+                string decryptedFile = @"C:\temp\test_decrypted.txt";
+                string key = "MySecretPassword123";
+
+                // 加密文件
+                int result = StreamEncryptFile(inputFile, encryptedFile, key);
+                if (result == 0)
+                {
+                    Console.WriteLine("文件加密成功");
+                    
+                    // 验证加密文件
+                    int isValid = ValidateEncryptedFile(encryptedFile, key);
+                    if (isValid == 1)
+                    {
+                        Console.WriteLine("加密文件验证成功");
+                        
+                        // 解密文件
+                        result = StreamDecryptFile(encryptedFile, decryptedFile, key);
+                        if (result == 0)
+                        {
+                            Console.WriteLine("文件解密成功");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"文件解密失败，错误码: {result}");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("加密文件验证失败");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"文件加密失败，错误码: {result}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"调用加密函数时发生异常: {ex.Message}");
+            }
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
 
         }
     }
