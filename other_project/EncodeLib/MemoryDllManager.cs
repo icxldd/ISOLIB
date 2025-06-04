@@ -122,6 +122,7 @@ namespace EncodeLib
             {
                 throw new InvalidOperationException($"无法找到DLL导出函数: {ex.Message}", ex);
             }
+
         }
 
         /// <summary>
