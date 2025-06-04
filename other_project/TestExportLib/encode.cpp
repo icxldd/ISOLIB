@@ -215,17 +215,22 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
         
         totalProcessed += bytesRead;
         
-        // Progress callback - report progress based on data processed
+        // Progress callback - 报告基于数据处理的真实进度
         if (progressCallback && totalFileSize > 0) {
-            double progress = (double)totalProcessed / (double)totalFileSize;
-            // Clamp progress to [0.0, 0.95] during processing, 1.0 reserved for completion
-            if (progress > 0.95) progress = 0.95;
-            progressCallback(filePath, progress);
+            // 计算数据处理进度（0-98%），为写校验和预留2%
+            double dataProgress = (double)totalProcessed / (double)totalFileSize;
+            double adjustedProgress = dataProgress * 0.98; // 数据处理占98%
+            progressCallback(filePath, adjustedProgress);
         }
     }
 
     // Write checksum
     if (result == SUCCESS) {
+        // Progress callback - 写校验和阶段（98%-100%）
+        if (progressCallback) {
+            progressCallback(filePath, 0.99); // 99% - 开始写校验和
+        }
+        
         unsigned int checksum = CalculateChecksum(key, keyLength);
         fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
         
@@ -355,25 +360,30 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         
         totalProcessed += bytesRead;
         
-        // Progress callback - report progress based on data processed
+        // Progress callback - 报告基于数据处理的真实进度
         if (progressCallback && dataSize > 0) {
-            double progress = (double)totalProcessed / (double)dataSize;
-            // Clamp progress to [0.0, 0.9] during processing, leave room for validation
-            if (progress > 0.9) progress = 0.9;
-            progressCallback(filePath, progress);
+            // 计算数据处理进度（0-95%），为校验阶段预留5%
+            double dataProgress = (double)totalProcessed / (double)dataSize;
+            double adjustedProgress = dataProgress * 0.95; // 数据处理占95%
+            progressCallback(filePath, adjustedProgress);
         }
     }
 
     // Verify checksum
     if (result == SUCCESS) {
-        // Progress callback - validation phase
+        // Progress callback - 校验阶段开始（95%-99%）
         if (progressCallback) {
-            progressCallback(filePath, 0.95);
+            progressCallback(filePath, 0.96); // 96% - 开始校验
         }
         
         fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
         unsigned int storedChecksum;
         if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+            // Progress callback - 计算校验和中
+            if (progressCallback) {
+                progressCallback(filePath, 0.98); // 98% - 计算校验和
+            }
+            
             unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
             if (storedChecksum != calculatedChecksum) {
                 OutputDebugStringA("Checksum validation failed - wrong key or corrupted file");
@@ -385,6 +395,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         
         // Final progress callback - 100% complete
         if (progressCallback) {
+              progressCallback(filePath, 0.99);
             progressCallback(filePath, 1.0);
         }
     }

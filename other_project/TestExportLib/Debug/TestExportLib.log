@@ -2,25 +2,26 @@
   pch.cpp
   dllmain.cpp
   encode.cpp
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(142,5): warning C4273: “StreamEncryptFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(17,17):
       参见“StreamEncryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(249,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(254,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(18,17):
       参见“StreamDecryptFile”的前一个定义
   
-  Pduapi.cpp
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(334,40): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(339,40): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(404,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(415,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(19,17):
       参见“ValidateEncryptedFile”的前一个定义
   
+  Pduapi.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\Pduapi.cpp(6,6): warning C4273: “HelloWord”: dll 链接不一致
   (编译源文件“/Pduapi.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\Pduapi.h(45,21):
