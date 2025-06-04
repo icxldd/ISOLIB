@@ -263,6 +263,37 @@ namespace TestWin
                 MessageBox.Show($"验证过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        private void button4_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // 创建文件选择对话框
+                OpenFileDialog openFileDialog = new OpenFileDialog();
+                
+                // 设置对话框属性
+                openFileDialog.Title = "选择要处理的文件";
+                openFileDialog.Filter = "所有文件 (*.*)|*.*|文本文件 (*.txt)|*.txt|加密文件 (*.encrypted)|*.encrypted";
+                openFileDialog.FilterIndex = 1; // 默认选择"所有文件"
+                openFileDialog.RestoreDirectory = true; // 记住上次打开的目录
+                openFileDialog.CheckFileExists = true; // 检查文件是否存在
+                openFileDialog.CheckPathExists = true; // 检查路径是否存在
+                
+                // 显示对话框
+                if (openFileDialog.ShowDialog() == DialogResult.OK)
+                {
+                    // 将选择的文件路径填入textBox1
+                    textBox1.Text = openFileDialog.FileName;
+                    
+                    // 可选：显示选择成功的提示
+                    // MessageBox.Show($"已选择文件：{openFileDialog.FileName}", "文件选择", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"选择文件时发生错误：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 
     public static class StructBaseExtensions
