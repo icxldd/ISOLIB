@@ -11,7 +11,11 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace TestWin
-{ 
+{
+    // 进度回调委托 - 指定调用约定为Cdecl以匹配C++
+    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+    public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);
+
     public partial class Form1 : Form
     {
         public Form1()
@@ -51,13 +55,19 @@ namespace TestWin
                 }
 
                 // 加密文件
-                int result = StreamEncryptFile(inputFile, encryptedFile, key);
+                richTextBox1.Clear(); // 清空之前的日志
+                richTextBox1.AppendText($"开始加密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
+                
+                int result = StreamEncryptFile(inputFile, encryptedFile, key, OnProgress);
+                
                 if (result == 0)
                 {
+                    richTextBox1.AppendText($"加密完成！文件保存在: {encryptedFile}\r\n");
                     MessageBox.Show($"文件加密成功！\n加密文件保存在：{encryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
+                    richTextBox1.AppendText($"加密失败！错误码: {result}\r\n");
                     MessageBox.Show($"文件加密失败！错误码: {result}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
@@ -107,34 +117,57 @@ namespace TestWin
             public uint NumEntries;
             public PDU_RSC_STATUS_DATA pResourceStatusData;
         }
-     
- 
+
+
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void HelloWord( IntPtr intPtr,ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3,PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
+        public static extern void HelloWord(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
 
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern void HelloWord2(UInt32 hh);
-
-        // 加密解密函数声明
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern int StreamEncryptFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
-            [MarshalAs(UnmanagedType.LPStr)] string outputPath, 
-            [MarshalAs(UnmanagedType.LPStr)] string key);
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string key,
+            ProgressCallback progressCallback = null);
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern int StreamDecryptFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
-            [MarshalAs(UnmanagedType.LPStr)] string outputPath, 
-            [MarshalAs(UnmanagedType.LPStr)] string key);
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string key,
+            ProgressCallback progressCallback = null);
 
         [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
         public static extern int ValidateEncryptedFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath, 
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
             [MarshalAs(UnmanagedType.LPStr)] string key);
 
+        // 进度回调方法 - 改为实例方法，支持UI线程安全更新
+        private void OnProgress(string filePath, double progress)
+        {
+            // progress 是 0.0 到 1.0 的小数，1.0 表示 100%
+            int percent = (int)(progress * 100);
+            
+            // 检查是否需要跨线程调用
+            if (this.InvokeRequired)
+            {
+                // 在UI线程上执行更新
+                this.Invoke(new Action(() =>
+                {
+                    richTextBox1.AppendText($"文件 {System.IO.Path.GetFileName(filePath)} 处理进度: {percent}%\r\n");
+                    richTextBox1.ScrollToCaret(); // 自动滚动到最新内容
+                }));
+            }
+            else
+            {
+                // 已经在UI线程上，直接更新
+                richTextBox1.AppendText($"文件 {System.IO.Path.GetFileName(filePath)} 处理进度: {percent}%\r\n");
+                richTextBox1.ScrollToCaret(); // 自动滚动到最新内容
+            }
+        }
         static void lala()
         {
             // 原来的测试代码已移动到三个按钮的点击事件中
@@ -204,14 +237,20 @@ namespace TestWin
                 }
 
                 // 解密文件
-                int result = StreamDecryptFile(inputFile, decryptedFile, key);
+                richTextBox1.Clear(); // 清空之前的日志
+                richTextBox1.AppendText($"开始解密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
+                
+                int result = StreamDecryptFile(inputFile, decryptedFile, key, OnProgress);
+                
                 if (result == 0)
                 {
+                    richTextBox1.AppendText($"解密完成！文件保存在: {decryptedFile}\r\n");
                     MessageBox.Show($"文件解密成功！\n解密文件保存在：{decryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
                 {
                     string errorMsg = GetErrorMessage(result);
+                    richTextBox1.AppendText($"解密失败！错误: {errorMsg} (错误码: {result})\r\n");
                     MessageBox.Show($"文件解密失败！\n错误: {errorMsg} (错误码: {result})", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
@@ -270,7 +309,7 @@ namespace TestWin
             {
                 // 创建文件选择对话框
                 OpenFileDialog openFileDialog = new OpenFileDialog();
-                
+
                 // 设置对话框属性
                 openFileDialog.Title = "选择要处理的文件";
                 openFileDialog.Filter = "所有文件 (*.*)|*.*|文本文件 (*.txt)|*.txt|加密文件 (*.encrypted)|*.encrypted";
@@ -278,13 +317,13 @@ namespace TestWin
                 openFileDialog.RestoreDirectory = true; // 记住上次打开的目录
                 openFileDialog.CheckFileExists = true; // 检查文件是否存在
                 openFileDialog.CheckPathExists = true; // 检查路径是否存在
-                
+
                 // 显示对话框
                 if (openFileDialog.ShowDialog() == DialogResult.OK)
                 {
                     // 将选择的文件路径填入textBox1
                     textBox1.Text = openFileDialog.FileName;
-                    
+
                     // 可选：显示选择成功的提示
                     // MessageBox.Show($"已选择文件：{openFileDialog.FileName}", "文件选择", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }

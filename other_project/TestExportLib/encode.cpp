@@ -139,7 +139,7 @@ unsigned int CalculateChecksum(const unsigned char* data, size_t length) {
 }
 
 // Optimized StreamEncryptFile with complex bit rotation and large buffer
-int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* key) {
+int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* key, ProgressCallback progressCallback) {
     FILE* inputFile = NULL;
     FILE* outputFile = NULL;
     unsigned char* buffer = NULL;
@@ -159,6 +159,11 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
         OutputDebugStringA("Failed to open input file");
         return ERR_FILE_OPEN_FAILED;
     }
+
+    // Get file size for progress calculation
+    fseek(inputFile, 0, SEEK_END);
+    long totalFileSize = ftell(inputFile);
+    fseek(inputFile, 0, SEEK_SET);
 
     // Open output file
     fopen_s(&outputFile, outputPath, "wb");
@@ -181,8 +186,15 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
     fwrite(MAGIC_HEADER, 1, MAGIC_HEADER_SIZE, outputFile);
     fwrite(&keyLength, sizeof(int), 1, outputFile);
 
+    // Initial progress callback
+    if (progressCallback) {
+        progressCallback(filePath, 0.0);
+    }
+
     // Process file in large chunks for maximum speed with complex encryption
     size_t bytesRead;
+    long totalProcessed = 0;
+    
     while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
         // Enhanced XOR encryption with complex bit rotation for security
         for (size_t i = 0; i < bytesRead; i++) {
@@ -200,12 +212,28 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
             result = ERR_ENCRYPTION_FAILED;
             break;
         }
+        
+        totalProcessed += bytesRead;
+        
+        // Progress callback - report progress based on data processed
+        if (progressCallback && totalFileSize > 0) {
+            double progress = (double)totalProcessed / (double)totalFileSize;
+            // Clamp progress to [0.0, 0.95] during processing, 1.0 reserved for completion
+            if (progress > 0.95) progress = 0.95;
+            progressCallback(filePath, progress);
+        }
     }
 
     // Write checksum
     if (result == SUCCESS) {
         unsigned int checksum = CalculateChecksum(key, keyLength);
         fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
+        
+        // Final progress callback - 100% complete
+        if (progressCallback) {
+            progressCallback(filePath, 1.0);
+        }
+        
         OutputDebugStringA("Stream encryption completed successfully");
     }
 
@@ -218,7 +246,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 }
 
 // Optimized StreamDecryptFile with complex bit rotation and large buffer
-int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* key) {
+int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* key, ProgressCallback progressCallback) {
     FILE* inputFile = NULL;
     FILE* outputFile = NULL;
     unsigned char* buffer = NULL;
@@ -292,6 +320,11 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int), SEEK_SET);
     long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int);
 
+    // Initial progress callback
+    if (progressCallback) {
+        progressCallback(filePath, 0.0);
+    }
+
     // Process file in large chunks for maximum speed with complex decryption
     size_t bytesRead;
     long totalProcessed = 0;
@@ -321,10 +354,23 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         }
         
         totalProcessed += bytesRead;
+        
+        // Progress callback - report progress based on data processed
+        if (progressCallback && dataSize > 0) {
+            double progress = (double)totalProcessed / (double)dataSize;
+            // Clamp progress to [0.0, 0.9] during processing, leave room for validation
+            if (progress > 0.9) progress = 0.9;
+            progressCallback(filePath, progress);
+        }
     }
 
     // Verify checksum
     if (result == SUCCESS) {
+        // Progress callback - validation phase
+        if (progressCallback) {
+            progressCallback(filePath, 0.95);
+        }
+        
         fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
         unsigned int storedChecksum;
         if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
@@ -335,6 +381,11 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
             } else {
                 OutputDebugStringA("Stream decryption completed successfully");
             }
+        }
+        
+        // Final progress callback - 100% complete
+        if (progressCallback) {
+            progressCallback(filePath, 1.0);
         }
     }
 
