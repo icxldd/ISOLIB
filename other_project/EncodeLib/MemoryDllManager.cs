@@ -2,18 +2,18 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 
-namespace TestWin
+namespace EncodeLib
 {
     /// <summary>
     /// 内存DLL管理器 - 管理从内存加载的TestExportLib.dll
     /// 提供所有导出函数的委托包装
     /// </summary>
-    public class MemoryDllManager : IDisposable
+    internal class MemoryDllManager : IDisposable
     {
         private DLLFromMemory dllInstance;
         private bool disposed = false;
 
-        // 委托定义 - 与Form1.cs中的DllImport声明对应
+        // 委托定义 - 与原始DllImport声明对应
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
 
@@ -51,15 +51,10 @@ namespace TestWin
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate long GetLocalTimestampDelegate();
 
-        // 函数委托实例
-        public HelloWordDelegate HelloWord { get; private set; }
-        public HelloWord2Delegate HelloWord2 { get; private set; }
+      
         public StreamEncryptFileDelegate StreamEncryptFile { get; private set; }
         public StreamDecryptFileDelegate StreamDecryptFile { get; private set; }
-        public ValidateEncryptedFileDelegate ValidateEncryptedFile { get; private set; }
         public GetNTPTimestampDelegate GetNTPTimestamp { get; private set; }
-        public GetNTPTimestampFromServerDelegate GetNTPTimestampFromServer { get; private set; }
-        public GetLocalTimestampDelegate GetLocalTimestamp { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL到内存
@@ -121,6 +116,7 @@ namespace TestWin
                 StreamEncryptFile = dllInstance.GetDelegateFromFuncName<StreamEncryptFileDelegate>("StreamEncryptFile");
                 StreamDecryptFile = dllInstance.GetDelegateFromFuncName<StreamDecryptFileDelegate>("StreamDecryptFile");
                 GetNTPTimestamp = dllInstance.GetDelegateFromFuncName<GetNTPTimestampDelegate>("GetNTPTimestamp");
+               
             }
             catch (EntryPointNotFoundException ex)
             {
@@ -147,7 +143,7 @@ namespace TestWin
         }
     }
 
-    // 支持的结构体定义（从Form1.cs移植过来）
+    // 支持的结构体定义
     public enum T_PDU_IT
     {
         PDU_IT_IO_UNUM32 = 0x1000,
@@ -187,7 +183,7 @@ namespace TestWin
         public PDU_RSC_STATUS_DATA pResourceStatusData;
     }
 
-    // 进度回调委托定义（从Form1.cs移植过来）
+    // 进度回调委托定义
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);
 } 

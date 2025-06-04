@@ -9,133 +9,88 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using EncodeLib;
 
 namespace TestWin
-{
+{ 
 
     public partial class Form1 : Form
     {
-        // 内存DLL管理器实例
-        private MemoryDllManager dllManager;
-        private bool disposed = false;
-
         public Form1()
         {
             InitializeComponent();
             
-            // 初始化内存DLL管理器
-            InitializeMemoryDll();
+            // 初始化EncodeLib
+            InitializeEncodeLib();
         }
 
         /// <summary>
-        /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
+        /// 初始化EncodeLib管理器
         /// </summary>
-        private void InitializeMemoryDll()
+        private void InitializeEncodeLib()
         {
             try
             {
-                const string dllName = "TestExportLib.vmp.dll";
-                
                 // 显示加载信息
-                this.Text += " - 正在从内存加载DLL...";
+                this.Text += " - 正在初始化EncodeLib...";
                 
-                // 优先从嵌入资源加载DLL字节数组
-                byte[] dllBytes = null;
+                // 尝试获取EncodeLib实例（单例模式）
+                var encodeLib = EncodeLibManager.Instance;
                 
-                try
+                // 验证是否成功加载
+                if (encodeLib.IsLoaded)
                 {
-                    // 方法1：从嵌入资源加载（完全无硬盘痕迹）
-                    if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
-                    {
-                        dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
-                        this.Text = this.Text.Replace("正在从内存加载DLL...", "DLL已从嵌入资源加载 [无硬盘痕迹]");
-                    }
-                }
-                catch (Exception embedEx)
-                {
-                    // 嵌入资源加载失败，尝试备用方案
-                    this.Text = this.Text.Replace("正在从内存加载DLL...", "嵌入资源加载失败，尝试备用方案...");
+                    this.Text = this.Text.Replace("正在初始化EncodeLib...", "EncodeLib已成功初始化 [无硬盘痕迹]");
                     
-                    // 方法2：备用方案 - 从硬盘文件加载（如果嵌入资源不可用）
-                    string[] fallbackPaths = {
-                        @"D:\work\code\ISOLib\other_project\TestWin\bin\Debug\TestExportLib.vmp.dll",
-                        System.IO.Path.Combine(Application.StartupPath, dllName),
-                        dllName,
-                        System.IO.Path.Combine(Application.StartupPath, @"..\..\..\TestExportLib\bin\Debug\" + dllName),
-                        System.IO.Path.Combine(Application.StartupPath, @"..\..\..\TestExportLib\bin\Release\" + dllName)
-                    };
-
-                    dllBytes = EmbeddedResourceManager.GetDllBytesWithFallback(dllName, fallbackPaths);
-                    this.Text = this.Text.Replace("嵌入资源加载失败，尝试备用方案...", "DLL已从硬盘加载到内存 [备用方案]");
-                }
-
-                if (dllBytes == null || dllBytes.Length == 0)
-                {
-                    throw new InvalidOperationException("获取到的DLL字节数组为空");
-                }
-
-                // 从字节数组创建内存DLL管理器（真正的内存加载）
-                dllManager = new MemoryDllManager(dllBytes);
-                
-                // 验证DLL是否成功加载
-                if (dllManager.IsLoaded)
-                {
-                    // 显示成功信息和DLL大小
-                    this.Text += $" ({dllBytes.Length:N0} 字节)";
-                    
-                    // 可选：在调试模式下显示详细信息
                     #if DEBUG
-                    string debugInfo = $"DLL加载成功！\n";
-                    debugInfo += $"大小: {dllBytes.Length:N0} 字节\n";
-                    debugInfo += $"来源: {(EmbeddedResourceManager.IsEmbeddedDllExists(dllName) ? "嵌入资源" : "硬盘文件")}\n";
-                    //debugInfo += $"内存地址: 0x{dllManager.GetFunctionAddress("StreamEncryptFile").ToString("X")}\n\n";
-                    debugInfo += "嵌入资源信息:\n" + EmbeddedResourceManager.GetEmbeddedResourceInfo();
-                    
-                    // 可以显示在调试输出或日志中
-                    System.Diagnostics.Debug.WriteLine(debugInfo);
+                    System.Diagnostics.Debug.WriteLine("EncodeLib初始化成功！");
                     #endif
                 }
                 else
                 {
-                    throw new InvalidOperationException("DLL从内存加载失败");
+                    throw new InvalidOperationException("EncodeLib初始化失败");
                 }
             }
             catch (Exception ex)
             {
-                this.Text = "TestWin - DLL加载失败";
+                this.Text = "TestWin - EncodeLib初始化失败";
                 
-                string errorMsg = $"初始化内存DLL失败: {ex.Message}\n\n";
+                string errorMsg = $"初始化EncodeLib失败: {ex.Message}\n\n";
                 errorMsg += "可能的解决方案:\n";
-                errorMsg += "1. 确保TestExportLib.vmp.dll已正确编译并添加为嵌入资源\n";
-                errorMsg += "2. 检查DLL是否存在于指定路径\n";
+                errorMsg += "1. 确保EncodeLib.dll存在且正确引用\n";
+                errorMsg += "2. 确保TestExportLib.vmp.dll已正确嵌入到EncodeLib中\n";
                 errorMsg += "3. 确保DLL与当前平台（x86/x64）兼容\n\n";
                 errorMsg += $"详细错误:\n{ex}";
                 
-                // 显示资源调试信息
-                errorMsg += "\n\n当前嵌入资源:\n" + EmbeddedResourceManager.GetEmbeddedResourceInfo();
-                
-                MessageBox.Show(errorMsg, "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                dllManager = null;
+                MessageBox.Show(errorMsg, "EncodeLib初始化错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// 检查DLL是否已加载的辅助方法
+        /// 检查EncodeLib是否已加载的辅助方法
         /// </summary>
-        private bool CheckDllLoaded()
+        private bool CheckEncodeLibLoaded()
         {
-            if (dllManager == null || !dllManager.IsLoaded)
+            try
             {
-                MessageBox.Show("DLL未加载或加载失败！请重启应用程序。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (!EncodeLibManager.Instance.IsLoaded)
+                {
+                    MessageBox.Show("EncodeLib未加载或加载失败！请重启应用程序。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"EncodeLib检查失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return false;
             }
-            return true;
         }
 
         //加密
         private void button1_Click(object sender, EventArgs e)
         {
-            if (!CheckDllLoaded()) return;
+            if (!CheckEncodeLibLoaded()) return;
 
             try
             {
@@ -166,11 +121,11 @@ namespace TestWin
                     return;
                 }
 
-                // 加密文件 - 使用内存DLL管理器
+                // 加密文件 - 使用EncodeLib
                 richTextBox1.Clear(); // 清空之前的日志
                 richTextBox1.AppendText($"开始加密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
                 
-                int result = dllManager.StreamEncryptFile(inputFile, encryptedFile, key, OnProgress);
+                int result = EncodeLibManager.Instance.EncryptFile(inputFile, encryptedFile, key, OnProgress);
                 
                 if (result == 0)
                 {
@@ -179,8 +134,8 @@ namespace TestWin
                 }
                 else
                 {
-                    richTextBox1.AppendText($"加密失败！错误码: {result}\r\n");
-                    MessageBox.Show($"文件加密失败！错误码: {result}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    richTextBox1.AppendText($"加密失败！错误码: {result} - {EncodeLibManager.GetErrorMessage(result)}\r\n");
+                    MessageBox.Show($"文件加密失败！错误码: {result}\n错误信息: {EncodeLibManager.GetErrorMessage(result)}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
@@ -200,49 +155,34 @@ namespace TestWin
             // 检查是否需要跨线程调用
             if (this.InvokeRequired)
             {
-                // 在UI线程上执行更新
-                this.Invoke(new Action(() =>
-                {
-                    richTextBox1.AppendText($"文件 {System.IO.Path.GetFileName(filePath)} 处理进度: {percent}%\r\n");
-                    richTextBox1.ScrollToCaret(); // 自动滚动到最新内容
-                }));
+                this.Invoke(new Action<string, double>(OnProgress), filePath, progress);
+                return;
             }
-            else
-            {
-                // 已经在UI线程上，直接更新
-                richTextBox1.AppendText($"文件 {System.IO.Path.GetFileName(filePath)} 处理进度: {percent}%\r\n");
-                richTextBox1.ScrollToCaret(); // 自动滚动到最新内容
-            }
+            
+            // 更新日志显示
+            string fileName = System.IO.Path.GetFileName(filePath);
+            string progressText = $"处理进度: {fileName} - {percent}%\r\n";
+            richTextBox1.AppendText(progressText);
+            
+            // 滚动到底部
+            richTextBox1.SelectionStart = richTextBox1.Text.Length;
+            richTextBox1.ScrollToCaret();
+            
+            // 强制刷新UI
+            Application.DoEvents();
         }
-        
+
         static void lala()
         {
-            // 原来的测试代码已移动到三个按钮的点击事件中
-            // TestCryptoFunctions();
-
-            //// 创建 PDU_RSC_STATUS_ITEM 结构体实例
-        }
-
-        // 获取错误消息的辅助方法
-        private static string GetErrorMessage(int errorCode)
-        {
-            switch (errorCode)
-            {
-                case 0: return "成功";
-                case -1: return "文件打开失败";
-                case -2: return "内存分配失败";
-                case -3: return "加密失败";
-                case -4: return "解密失败";
-                case -5: return "无效文件头";
-                case -6: return "线程创建失败";
-                default: return "未知错误";
-            }
+            // 这个方法的具体实现暂时保留原样
+            // 注释掉错误的静态类实例化代码
+            System.Diagnostics.Debug.WriteLine("lala方法被调用");
         }
 
         //解密
         private void button2_Click(object sender, EventArgs e)
         {
-            if (!CheckDllLoaded()) return;
+            if (!CheckEncodeLibLoaded()) return;
 
             try
             {
@@ -253,6 +193,20 @@ namespace TestWin
                     return;
                 }
 
+                // 生成解密文件路径（移除.encrypted后缀，或添加.decrypted后缀）
+                string decryptedFile;
+                if (inputFile.EndsWith(".encrypted", StringComparison.OrdinalIgnoreCase))
+                {
+                    decryptedFile = inputFile.Substring(0, inputFile.Length - ".encrypted".Length);
+                }
+                else
+                {
+                    string directory = System.IO.Path.GetDirectoryName(inputFile);
+                    string fileName = System.IO.Path.GetFileNameWithoutExtension(inputFile);
+                    string extension = System.IO.Path.GetExtension(inputFile);
+                    decryptedFile = System.IO.Path.Combine(directory, fileName + extension + ".decrypted");
+                }
+
                 string key = textBox2.Text;
                 if (string.IsNullOrEmpty(key))
                 {
@@ -267,29 +221,11 @@ namespace TestWin
                     return;
                 }
 
-                // 生成解密后的文件路径
-                string directory = System.IO.Path.GetDirectoryName(inputFile);
-                string fileName = System.IO.Path.GetFileName(inputFile);
-                string decryptedFile;
-
-                // 如果是.encrypted文件，则去掉.encrypted后缀
-                if (fileName.EndsWith(".encrypted"))
-                {
-                    decryptedFile = System.IO.Path.Combine(directory, fileName.Substring(0, fileName.Length - 10)); // 去掉".encrypted"
-                }
-                else
-                {
-                    // 如果不是.encrypted文件，添加_decrypted后缀
-                    string fileNameWithoutExt = System.IO.Path.GetFileNameWithoutExtension(inputFile);
-                    string extension = System.IO.Path.GetExtension(inputFile);
-                    decryptedFile = System.IO.Path.Combine(directory, fileNameWithoutExt + "_decrypted" + extension);
-                }
-
-                // 解密文件 - 使用内存DLL管理器
-                richTextBox1.Clear(); // 清空之前的日志
+                // 解密文件 - 使用EncodeLib
+                richTextBox1.Clear();
                 richTextBox1.AppendText($"开始解密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
                 
-                int result = dllManager.StreamDecryptFile(inputFile, decryptedFile, key, OnProgress);
+                int result = EncodeLibManager.Instance.DecryptFile(inputFile, decryptedFile, key, OnProgress);
                 
                 if (result == 0)
                 {
@@ -298,9 +234,8 @@ namespace TestWin
                 }
                 else
                 {
-                    string errorMsg = GetErrorMessage(result);
-                    richTextBox1.AppendText($"解密失败！错误: {errorMsg} (错误码: {result})\r\n");
-                    MessageBox.Show($"文件解密失败！\n错误: {errorMsg} (错误码: {result})", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    richTextBox1.AppendText($"解密失败！错误码: {result} - {EncodeLibManager.GetErrorMessage(result)}\r\n");
+                    MessageBox.Show($"文件解密失败！错误码: {result}\n错误信息: {EncodeLibManager.GetErrorMessage(result)}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
@@ -309,213 +244,183 @@ namespace TestWin
             }
         }
 
-        //验证文件是否有效加密文件
+        //验证文件
         private void button3_Click(object sender, EventArgs e)
         {
-            if (!CheckDllLoaded()) return;
+            //if (!CheckEncodeLibLoaded()) return;
 
-            try
-            {
-                string inputFile = textBox1.Text;
-                if (string.IsNullOrEmpty(inputFile))
-                {
-                    MessageBox.Show("请选择要验证的文件！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
+            //try
+            //{
+            //    string inputFile = textBox1.Text;
+            //    string key = textBox2.Text;
 
-                string key = textBox2.Text;
-                if (string.IsNullOrEmpty(key))
-                {
-                    MessageBox.Show("请输入密钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
+            //    if (string.IsNullOrEmpty(inputFile))
+            //    {
+            //        MessageBox.Show("请选择要验证的文件！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            //        return;
+            //    }
 
-                // 检查输入文件是否存在
-                if (!System.IO.File.Exists(inputFile))
-                {
-                    MessageBox.Show("输入文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                    return;
-                }
+            //    if (string.IsNullOrEmpty(key))
+            //    {
+            //        MessageBox.Show("请输入密钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            //        return;
+            //    }
 
-                // 验证加密文件 - 使用内存DLL管理器
-                int result = dllManager.ValidateEncryptedFile(inputFile, key);
-                if (result == 1)
-                {
-                    MessageBox.Show("文件验证成功！\n这是一个有效的加密文件，并且密钥正确。", "验证成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-                else
-                {
-                    MessageBox.Show("文件验证失败！\n可能的原因：\n1. 这不是一个加密文件\n2. 文件已损坏\n3. 密钥错误", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"验证过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            //    if (!System.IO.File.Exists(inputFile))
+            //    {
+            //        MessageBox.Show("输入文件不存在！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //        return;
+            //    }
+
+            //    // 验证文件 - 使用EncodeLib
+            //    richTextBox1.Clear();
+            //    richTextBox1.AppendText($"开始验证文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
+                
+            //    int result = EncodeLibManager.Instance.ValidateEncryptedFile(inputFile, key);
+                
+            //    if (result == 1)
+            //    {
+            //        richTextBox1.AppendText("文件验证成功！密钥正确。\r\n");
+            //        MessageBox.Show("文件验证成功！密钥正确。", "验证成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            //    }
+            //    else
+            //    {
+            //        richTextBox1.AppendText("文件验证失败！密钥错误或文件已损坏。\r\n");
+            //        MessageBox.Show("文件验证失败！密钥错误或文件已损坏。", "验证失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    MessageBox.Show($"验证过程中发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            //}
         }
 
+        //选择文件
         private void button4_Click(object sender, EventArgs e)
         {
-            try
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Filter = "所有文件 (*.*)|*.*|文本文件 (*.txt)|*.txt|加密文件 (*.encrypted)|*.encrypted";
+            openFileDialog.FilterIndex = 1;
+            openFileDialog.RestoreDirectory = true;
+
+            if (openFileDialog.ShowDialog() == DialogResult.OK)
             {
-                // 先测试NTP时间同步
-                TestNTPSync();
-                
-                // 创建文件选择对话框
-                OpenFileDialog openFileDialog = new OpenFileDialog();
-
-                // 设置对话框属性
-                openFileDialog.Title = "选择要处理的文件";
-                openFileDialog.Filter = "所有文件 (*.*)|*.*|文本文件 (*.txt)|*.txt|加密文件 (*.encrypted)|*.encrypted";
-                openFileDialog.FilterIndex = 1; // 默认选择"所有文件"
-                openFileDialog.RestoreDirectory = true; // 记住上次打开的目录
-                openFileDialog.CheckFileExists = true; // 检查文件是否存在
-                openFileDialog.CheckPathExists = true; // 检查路径是否存在
-
-                // 显示对话框
-                if (openFileDialog.ShowDialog() == DialogResult.OK)
-                {
-                    // 将选择的文件路径填入textBox1
-                    textBox1.Text = openFileDialog.FileName;
-
-                    // 可选：显示选择成功的提示
-                    // MessageBox.Show($"已选择文件：{openFileDialog.FileName}", "文件选择", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"操作过程中发生错误：{ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                textBox1.Text = openFileDialog.FileName;
+                richTextBox1.Clear();
+                richTextBox1.AppendText($"已选择文件: {openFileDialog.FileName}\r\n");
             }
         }
 
-        // 测试NTP时间同步
+        //NTP时间同步测试
         private void TestNTPSync()
         {
-            if (!CheckDllLoaded()) return;
+            if (!CheckEncodeLibLoaded()) return;
 
             try
             {
-                richTextBox1.AppendText("=== NTP时间同步测试 ===\r\n");
+                richTextBox1.AppendText("开始获取NTP时间戳...\r\n");
                 
                 long timestamp;
-                int result = dllManager.GetNTPTimestamp(out timestamp);
+                int result = EncodeLibManager.Instance.GetNTPTimestamp(out timestamp);
                 
-                if (result == 0) // NTP_SUCCESS
+                if (result == 0)
                 {
-                    // 转换为可读的时间格式
-                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
-                    DateTime localTime = utcTime.ToLocalTime();
-                    
-                    richTextBox1.AppendText($"NTP同步成功！\r\n");
-                    richTextBox1.AppendText($"Unix时间戳: {timestamp}\r\n");
-                    richTextBox1.AppendText($"UTC时间: {utcTime:yyyy-MM-dd HH:mm:ss}\r\n");
-                    richTextBox1.AppendText($"本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    DateTime ntpTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
+                    richTextBox1.AppendText($"NTP时间戳获取成功！\r\n");
+                    richTextBox1.AppendText($"时间戳: {timestamp}\r\n");
+                    richTextBox1.AppendText($"UTC时间: {ntpTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    richTextBox1.AppendText($"本地时间: {ntpTime.ToLocalTime():yyyy-MM-dd HH:mm:ss}\r\n");
                 }
                 else
                 {
-                    string errorMsg = GetNTPErrorMessage(result);
-                    richTextBox1.AppendText($"NTP同步失败: {errorMsg} (错误码: {result})\r\n");
-                    
-                    // 显示本地时间作为备用
-                    long localTimestamp = dllManager.GetLocalTimestamp();
-                    DateTime localTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTimestamp).ToLocalTime();
-                    richTextBox1.AppendText($"使用本地时间: {localTimestamp} ({localTime:yyyy-MM-dd HH:mm:ss})\r\n");
+                    richTextBox1.AppendText($"NTP时间戳获取失败！错误码: {result}\r\n");
                 }
-                
-                richTextBox1.AppendText("\r\n");
             }
             catch (Exception ex)
             {
-                richTextBox1.AppendText($"NTP测试异常: {ex.Message}\r\n");
+                richTextBox1.AppendText($"NTP时间同步异常: {ex.Message}\r\n");
             }
         }
 
-        // 测试指定服务器NTP同步
         private void TestNTPSyncFromServer(string server)
         {
-            if (!CheckDllLoaded()) return;
+            //if (!CheckEncodeLibLoaded()) return;
 
+            //try
+            //{
+            //    richTextBox1.AppendText($"开始从服务器 {server} 获取NTP时间戳...\r\n");
+                
+            //    long timestamp;
+            //    int result = EncodeLibManager.Instance.GetNTPTimestampFromServer(server, out timestamp, 5000);
+                
+            //    if (result == 0)
+            //    {
+            //        DateTime ntpTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
+            //        richTextBox1.AppendText($"从 {server} 获取NTP时间戳成功！\r\n");
+            //        richTextBox1.AppendText($"时间戳: {timestamp}\r\n");
+            //        richTextBox1.AppendText($"UTC时间: {ntpTime:yyyy-MM-dd HH:mm:ss}\r\n");
+            //        richTextBox1.AppendText($"本地时间: {ntpTime.ToLocalTime():yyyy-MM-dd HH:mm:ss}\r\n");
+            //    }
+            //    else
+            //    {
+            //        richTextBox1.AppendText($"从 {server} 获取NTP时间戳失败！错误码: {result}\r\n");
+            //    }
+            //}
+            //catch (Exception ex)
+            //{
+            //    richTextBox1.AppendText($"从 {server} NTP时间同步异常: {ex.Message}\r\n");
+            //}
+        }
+
+        //NTP同步测试按钮
+        private void button5_Click(object sender, EventArgs e)
+        {
+            richTextBox1.Clear();
+            richTextBox1.AppendText("=== NTP时间同步测试 ===\r\n");
+            
+            // 测试默认NTP服务器
+            TestNTPSync();
+            
+            richTextBox1.AppendText("\r\n=== 测试不同NTP服务器 ===\r\n");
+            
+            // 测试不同的NTP服务器
+            string[] ntpServers = {
+                "pool.ntp.org",
+                "time.windows.com",
+                "time.nist.gov",
+                "cn.pool.ntp.org"
+            };
+            
+            foreach (string server in ntpServers)
+            {
+                TestNTPSyncFromServer(server);
+                richTextBox1.AppendText("\r\n");
+            }
+            
+            // 获取本地时间戳作为对比
             try
             {
-                richTextBox1.AppendText($"=== 测试服务器: {server} ===\r\n");
-                
-                long timestamp;
-                int result = dllManager.GetNTPTimestampFromServer(server, out timestamp, 5000); // 5秒超时
-                
-                if (result == 0) // NTP_SUCCESS
-                {
-                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timestamp);
-                    DateTime localTime = utcTime.ToLocalTime();
-                    
-                    richTextBox1.AppendText($"服务器 {server} 同步成功！\r\n");
-                    richTextBox1.AppendText($"时间戳: {timestamp}, 时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
-                }
-                else
-                {
-                    string errorMsg = GetNTPErrorMessage(result);
-                    richTextBox1.AppendText($"服务器 {server} 同步失败: {errorMsg}\r\n");
-                }
-                
-                richTextBox1.AppendText("\r\n");
+                //long localTimestamp = EncodeLibManager.Instance.GetLocalTimestamp();
+                //DateTime localTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTimestamp);
+                //richTextBox1.AppendText("=== 本地时间戳 ===\r\n");
+                //richTextBox1.AppendText($"本地时间戳: {localTimestamp}\r\n");
+                //richTextBox1.AppendText($"UTC时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                //richTextBox1.AppendText($"本地时间: {localTime.ToLocalTime():yyyy-MM-dd HH:mm:ss}\r\n");
             }
             catch (Exception ex)
             {
-                richTextBox1.AppendText($"测试服务器异常: {ex.Message}\r\n");
+                richTextBox1.AppendText($"获取本地时间戳失败: {ex.Message}\r\n");
             }
         }
-
-        // 获取NTP错误消息
-        private string GetNTPErrorMessage(int errorCode)
-        {
-            switch (errorCode)
-            {
-                case 0: return "成功";
-                case -1: return "网络错误";
-                case -2: return "请求超时";
-                case -3: return "无效响应";
-                case -4: return "所有服务器失败";
-                default: return "未知错误";
-            }
-        }
-
-        private void button5_Click(object sender, EventArgs e)
-        {
-            if (!CheckDllLoaded()) return;
-
-            richTextBox1.Clear();
-            richTextBox1.AppendText("=== NTP调试测试 ===\r\n");
-            
-            var result = dllManager.GetNTPTimestamp(out var time);
-            
-            richTextBox1.AppendText($"返回码: {result} ({GetNTPErrorMessage(result)})\r\n");
-            richTextBox1.AppendText($"时间戳: {time}\r\n");
-            
-            if (time > 0) {
-                try {
-                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(time);
-                    DateTime localTime = utcTime.ToLocalTime();
-                    richTextBox1.AppendText($"UTC时间: {utcTime:yyyy-MM-dd HH:mm:ss}\r\n");
-                    richTextBox1.AppendText($"本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
-                } catch (Exception ex) {
-                    richTextBox1.AppendText($"时间转换失败: {ex.Message}\r\n");
-                }
-            }
-            
-            // 同时显示本地时间作为对比
-            long localTime2 = dllManager.GetLocalTimestamp();
-            DateTime localDT = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTime2).ToLocalTime();
-            richTextBox1.AppendText($"本地系统时间戳: {localTime2} ({localDT:yyyy-MM-dd HH:mm:ss})\r\n");
-        }
-
     }
 
     public static class StructBaseExtensions
     {
         public static IntPtr GetIntPtr<T>(this T myStruct) where T : struct
         {
-            IntPtr pItemPtr = Marshal.AllocHGlobal(Marshal.SizeOf(myStruct));
-            Marshal.StructureToPtr(myStruct, pItemPtr, false);
-            return pItemPtr;
+            IntPtr structPtr = Marshal.AllocHGlobal(Marshal.SizeOf(myStruct));
+            Marshal.StructureToPtr(myStruct, structPtr, false);
+            return structPtr;
         }
     }
 }

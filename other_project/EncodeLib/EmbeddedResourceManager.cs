@@ -2,20 +2,20 @@ using System;
 using System.IO;
 using System.Reflection;
 
-namespace TestWin
+namespace EncodeLib
 {
     /// <summary>
     /// 嵌入资源管理器 - 用于从程序集中读取嵌入的DLL文件
     /// 实现完全无硬盘痕迹的DLL加载
     /// </summary>
-    public static class EmbeddedResourceManager
+    internal static class EmbeddedResourceManager
     {
         /// <summary>
         /// 从嵌入资源中读取DLL字节数组
         /// </summary>
         /// <param name="dllName">DLL文件名（如：TestExportLib.vmp.dll）</param>
         /// <returns>DLL的字节数组</returns>
-        public static byte[] GetEmbeddedDllBytes(string dllName)
+        internal static byte[] GetEmbeddedDllBytes(string dllName)
         {
             try
             {
@@ -68,7 +68,7 @@ namespace TestWin
         /// 获取所有嵌入资源的名称列表（用于调试）
         /// </summary>
         /// <returns>资源名称数组</returns>
-        public static string[] GetAllEmbeddedResourceNames()
+        internal static string[] GetAllEmbeddedResourceNames()
         {
             Assembly currentAssembly = Assembly.GetExecutingAssembly();
             return currentAssembly.GetManifestResourceNames();
@@ -79,7 +79,7 @@ namespace TestWin
         /// </summary>
         /// <param name="dllName">DLL文件名</param>
         /// <returns>是否存在</returns>
-        public static bool IsEmbeddedDllExists(string dllName)
+        internal static bool IsEmbeddedDllExists(string dllName)
         {
             try
             {
@@ -120,7 +120,7 @@ namespace TestWin
         /// 获取嵌入资源的详细信息（用于调试）
         /// </summary>
         /// <returns>资源信息字符串</returns>
-        public static string GetEmbeddedResourceInfo()
+        internal static string GetEmbeddedResourceInfo()
         {
             try
             {
@@ -154,7 +154,7 @@ namespace TestWin
         /// <param name="dllName">DLL文件名</param>
         /// <param name="fallbackPaths">备用硬盘路径</param>
         /// <returns>DLL字节数组</returns>
-        public static byte[] GetDllBytesWithFallback(string dllName, params string[] fallbackPaths)
+        internal static byte[] GetDllBytesWithFallback(string dllName, params string[] fallbackPaths)
         {
             // 优先尝试从嵌入资源加载
             try
