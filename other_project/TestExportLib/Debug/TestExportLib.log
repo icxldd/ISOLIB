@@ -16,7 +16,7 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(254,5): warning C4273
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(29,17):
       参见“StreamDecryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(339,40): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(364,40): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
   ntp.cpp

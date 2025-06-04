@@ -149,14 +149,14 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
     const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
     
     if (keyLength == 0) {
-        OutputDebugStringA("错误：提供的密钥为空");
+        //OutputDebugStringA("错误：提供的密钥为空");
         return ERR_ENCRYPTION_FAILED;
     }
 
     // 打开输入文件
     fopen_s(&inputFile, filePath, "rb");
     if (!inputFile) {
-        OutputDebugStringA("输入文件打开失败");
+        //OutputDebugStringA("输入文件打开失败");
         return ERR_FILE_OPEN_FAILED;
     }
 
@@ -168,7 +168,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
     // 打开输出文件
     fopen_s(&outputFile, outputPath, "wb");
     if (!outputFile) {
-        OutputDebugStringA("输出文件创建失败");
+        //OutputDebugStringA("输出文件创建失败");
         fclose(inputFile);
         return ERR_FILE_OPEN_FAILED;
     }
@@ -176,7 +176,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
     // 分配大缓冲区用于高性能处理
     buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
     if (!buffer) {
-        OutputDebugStringA("内存分配失败");
+        //OutputDebugStringA("内存分配失败");
         fclose(inputFile);
         fclose(outputFile);
         return ERR_MEMORY_ALLOCATION_FAILED;
@@ -208,7 +208,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
         // 立即写入加密数据
         size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
         if (bytesWritten != bytesRead) {
-            OutputDebugStringA("加密数据写入失败");
+            //OutputDebugStringA("加密数据写入失败");
             result = ERR_ENCRYPTION_FAILED;
             break;
         }
@@ -239,7 +239,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
             progressCallback(filePath, 1.0);
         }
         
-        OutputDebugStringA("流式加密成功完成");
+        //OutputDebugStringA("流式加密成功完成");
     }
 
     // 清理资源
@@ -263,20 +263,20 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
 
     if (keyLength == 0) {
-        OutputDebugStringA("错误：提供的密钥为空");
+        //OutputDebugStringA("错误：提供的密钥为空");
         return ERR_DECRYPTION_FAILED;
     }
 
     // 打开输入文件
     fopen_s(&inputFile, filePath, "rb");
     if (!inputFile) {
-        OutputDebugString(L"输入文件打开失败");
+        //OutputDebugString(L"输入文件打开失败");
         return ERR_FILE_OPEN_FAILED;
     }
 
     // 读取并验证文件头（早期格式检测）
     if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
-        OutputDebugString(L"文件头读取失败 - 文件太小或已损坏");
+        //OutputDebugString(L"文件头读取失败 - 文件太小或已损坏");
         fclose(inputFile);
         return ERR_INVALID_HEADER;
     }
@@ -290,22 +290,47 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 
     // 读取存储的密钥长度
     if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
-        OutputDebugString(L"密钥长度读取失败");
+        //OutputDebugString(L"密钥长度读取失败");
         fclose(inputFile);
         return ERR_INVALID_HEADER;
     }
 
     // 验证密钥长度（早期验证）
     if (storedKeyLength != keyLength) {
-        OutputDebugStringA("密钥长度不匹配 - 提供了错误的密钥");
+        //OutputDebugStringA("密钥长度不匹配 - 提供了错误的密钥");
         fclose(inputFile);
         return ERR_DECRYPTION_FAILED;
     }
 
+    // *** 新增：立即验证校验和，避免大文件错误解密 ***
+    // 保存当前文件位置
+    long currentPos = ftell(inputFile);
+    
+    // 跳到文件末尾读取校验和
+    fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+    unsigned int storedChecksum;
+    if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+        unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
+        if (storedChecksum != calculatedChecksum) {
+            //OutputDebugStringA("校验和验证失败 - 密钥错误或文件已损坏，停止解密");
+            fclose(inputFile);
+            return ERR_DECRYPTION_FAILED;
+        } else {
+            //OutputDebugStringA("校验和验证成功 - 密钥正确，开始解密");
+        }
+    } else {
+        //OutputDebugStringA("无法读取校验和");
+        fclose(inputFile);
+        return ERR_INVALID_HEADER;
+    }
+    
+    // 恢复文件位置到数据开始处
+    fseek(inputFile, currentPos, SEEK_SET);
+
     // 打开输出文件
     fopen_s(&outputFile, outputPath, "wb");
     if (!outputFile) {
-        OutputDebugStringA("输出文件创建失败");
+        //OutputDebugStringA("输出文件创建失败");
         fclose(inputFile);
         return ERR_FILE_OPEN_FAILED;
     }
@@ -313,7 +338,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     // 分配大缓冲区
     buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
     if (!buffer) {
-        OutputDebugStringA("内存分配失败");
+        //OutputDebugStringA("内存分配失败");
         fclose(inputFile);
         fclose(outputFile);
         return ERR_MEMORY_ALLOCATION_FAILED;
@@ -353,7 +378,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         // 立即写入解密数据
         size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
         if (bytesWritten != bytesRead) {
-            OutputDebugStringA("解密数据写入失败");
+            //OutputDebugStringA("解密数据写入失败");
             result = ERR_DECRYPTION_FAILED;
             break;
         }
@@ -362,42 +387,20 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         
         // 进度回调 - 报告基于数据处理的真实进度
         if (progressCallback && dataSize > 0) {
-            // 计算数据处理进度（0-95%），为校验阶段预留5%
+            // 现在数据处理占100%，因为校验和已在开头验证
             double dataProgress = (double)totalProcessed / (double)dataSize;
-            double adjustedProgress = dataProgress * 0.95; // 数据处理占95%
-            progressCallback(filePath, adjustedProgress);
+            progressCallback(filePath, dataProgress);
         }
     }
 
-    // 验证校验和
+    // 解密完成后的最终处理
     if (result == SUCCESS) {
-        // 进度回调 - 校验阶段开始（95%-99%）
-        if (progressCallback) {
-            progressCallback(filePath, 0.96); // 96% - 开始校验
-        }
-        
-        fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
-        unsigned int storedChecksum;
-        if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
-            // 进度回调 - 计算校验和中
-            if (progressCallback) {
-                progressCallback(filePath, 0.98); // 98% - 计算校验和
-            }
-            
-            unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
-            if (storedChecksum != calculatedChecksum) {
-                OutputDebugStringA("校验和验证失败 - 密钥错误或文件已损坏");
-                result = ERR_DECRYPTION_FAILED;
-            } else {
-                OutputDebugStringA("流式解密成功完成");
-            }
-        }
-        
         // 最终进度回调 - 100%完成
         if (progressCallback) {
-            progressCallback(filePath, 0.99);
             progressCallback(filePath, 1.0);
         }
+        
+        //OutputDebugStringA("流式解密成功完成");
     }
 
     // 清理资源
@@ -421,41 +424,41 @@ int ValidateEncryptedFile(const char* filePath, const unsigned char* key) {
     bool isValid = false;
 
     if (keyLength == 0) {
-        OutputDebugStringA("Error: Empty key provided");
+        //OutputDebugStringA("Error: Empty key provided");
         return 0; // Invalid
     }
 
     // Open input file
     fopen_s(&inputFile, filePath, "rb");
     if (!inputFile) {
-        OutputDebugStringA("Failed to open input file for validation");
+        //OutputDebugStringA("Failed to open input file for validation");
         return 0; // Invalid
     }
 
     // Read and validate header (early format detection)
     if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
-        OutputDebugStringA("Validation failed: Cannot read header");
+        //OutputDebugStringA("Validation failed: Cannot read header");
         fclose(inputFile);
         return 0; // Invalid
     }
 
     header[MAGIC_HEADER_SIZE] = '\0';
     if (strcmp(header, MAGIC_HEADER) != 0) {
-        OutputDebugStringA("Validation failed: Invalid file format");
+        //OutputDebugStringA("Validation failed: Invalid file format");
         fclose(inputFile);
         return 0; // Invalid
     }
 
     // Read stored key length
     if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
-        OutputDebugStringA("Validation failed: Cannot read key length");
+        //OutputDebugStringA("Validation failed: Cannot read key length");
         fclose(inputFile);
         return 0; // Invalid
     }
 
     // Validate key length (early validation)
     if (storedKeyLength != keyLength) {
-        OutputDebugStringA("Validation failed: Key length mismatch");
+        //OutputDebugStringA("Validation failed: Key length mismatch");
         fclose(inputFile);
         return 0; // Invalid
     }
@@ -467,12 +470,12 @@ int ValidateEncryptedFile(const char* filePath, const unsigned char* key) {
         unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
         if (storedChecksum == calculatedChecksum) {
             isValid = true;
-            OutputDebugStringA("File validation successful");
+            //OutputDebugStringA("File validation successful");
         } else {
-            OutputDebugStringA("Validation failed: Checksum mismatch");
+            //OutputDebugStringA("Validation failed: Checksum mismatch");
         }
     } else {
-        OutputDebugStringA("Validation failed: Cannot read checksum");
+        //OutputDebugStringA("Validation failed: Cannot read checksum");
     }
 
     // Clean up
