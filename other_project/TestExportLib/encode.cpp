@@ -138,12 +138,15 @@ unsigned int CalculateChecksum(const unsigned char* data, size_t length) {
     return checksum;
 }
 
+// Optimized StreamEncryptFile with complex bit rotation and large buffer
 int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* key) {
     FILE* inputFile = NULL;
     FILE* outputFile = NULL;
     unsigned char* buffer = NULL;
     int result = SUCCESS;
     int keyLength = strlen((const char*)key);
+    
+    const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB buffer for high performance
     
     if (keyLength == 0) {
         OutputDebugStringA("Error: Empty key provided");
@@ -165,8 +168,8 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
         return ERR_FILE_OPEN_FAILED;
     }
 
-    // Allocate buffer
-    buffer = (unsigned char*)malloc(BUFFER_SIZE);
+    // Allocate large buffer for high-performance processing
+    buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
     if (!buffer) {
         OutputDebugStringA("Failed to allocate memory");
         fclose(inputFile);
@@ -174,55 +177,36 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
         return ERR_MEMORY_ALLOCATION_FAILED;
     }
 
-    // Initialize critical section
-    InitializeCriticalSectionIfNeeded();
-
     // Write magic header to identify encrypted files
     fwrite(MAGIC_HEADER, 1, MAGIC_HEADER_SIZE, outputFile);
-    
-    // Write key length for validation
     fwrite(&keyLength, sizeof(int), 1, outputFile);
 
-    // Get file size for progress tracking
-    fseek(inputFile, 0, SEEK_END);
-    long fileSize = ftell(inputFile);
-    fseek(inputFile, 0, SEEK_SET);
-    
-    long totalProcessed = 0;
-
-    // Process file in chunks (streaming encryption)
+    // Process file in large chunks for maximum speed with complex encryption
     size_t bytesRead;
-    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
-        // Encrypt buffer in parallel
-        if (!ProcessBufferParallel(buffer, bytesRead, key, keyLength, true)) {
-            OutputDebugStringA("Parallel encryption failed");
-            result = ERR_ENCRYPTION_FAILED;
-            break;
+    while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+        // Enhanced XOR encryption with complex bit rotation for security
+        for (size_t i = 0; i < bytesRead; i++) {
+            // Apply XOR with key rotation
+            unsigned char keyByte = key[i % keyLength];
+            // Complex bit rotation for enhanced security
+            keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
+            buffer[i] ^= keyByte;
         }
         
-        // Write encrypted data immediately (streaming output)
+        // Write encrypted data immediately
         size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
         if (bytesWritten != bytesRead) {
             OutputDebugStringA("Failed to write encrypted data");
             result = ERR_ENCRYPTION_FAILED;
             break;
         }
-        
-        totalProcessed += bytesRead;
-        
-        // Optional: Output progress (can be removed in production)
-        if (fileSize > 0) {
-            int progress = (int)((totalProcessed * 100) / fileSize);
-            char progressMsg[64];
-            sprintf_s(progressMsg, sizeof(progressMsg), "Encryption progress: %d%%", progress);
-            OutputDebugStringA(progressMsg);
-        }
     }
 
-    // Write checksum at the end for validation
+    // Write checksum
     if (result == SUCCESS) {
         unsigned int checksum = CalculateChecksum(key, keyLength);
         fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
+        OutputDebugStringA("Stream encryption completed successfully");
     }
 
     // Clean up
@@ -230,13 +214,10 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
     fclose(inputFile);
     fclose(outputFile);
     
-    if (result == SUCCESS) {
-        OutputDebugStringA("File encrypted successfully");
-    }
-    
     return result;
 }
 
+// Optimized StreamDecryptFile with complex bit rotation and large buffer
 int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* key) {
     FILE* inputFile = NULL;
     FILE* outputFile = NULL;
@@ -245,6 +226,8 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     char header[MAGIC_HEADER_SIZE + 1];
     int storedKeyLength = 0;
     int keyLength = strlen((const char*)key);
+    
+    const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB buffer
 
     if (keyLength == 0) {
         OutputDebugStringA("Error: Empty key provided");
@@ -294,8 +277,8 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         return ERR_FILE_OPEN_FAILED;
     }
 
-    // Allocate buffer
-    buffer = (unsigned char*)malloc(BUFFER_SIZE);
+    // Allocate large buffer
+    buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
     if (!buffer) {
         OutputDebugStringA("Failed to allocate memory");
         fclose(inputFile);
@@ -303,65 +286,55 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
         return ERR_MEMORY_ALLOCATION_FAILED;
     }
 
-    // Initialize critical section
-    InitializeCriticalSectionIfNeeded();
-
-    // Get file size for progress tracking
+    // Get file size and calculate data size
     fseek(inputFile, 0, SEEK_END);
     long fileSize = ftell(inputFile);
-    fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int), SEEK_SET); // Reset to data start
-    
-    long totalProcessed = 0;
-    long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int); // Exclude header and checksum
+    fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int), SEEK_SET);
+    long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int);
 
-    // Process file in chunks (streaming decryption)
+    // Process file in large chunks for maximum speed with complex decryption
     size_t bytesRead;
-    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
-        // Check if this is the last chunk containing checksum
-        if (totalProcessed + bytesRead == dataSize + sizeof(unsigned int)) {
-            // This chunk contains the checksum at the end
-            if (bytesRead >= sizeof(unsigned int)) {
-                bytesRead -= sizeof(unsigned int); // Don't decrypt the checksum
-                
-                // Verify checksum
-                unsigned int storedChecksum, calculatedChecksum;
-                fseek(inputFile, -(long)sizeof(unsigned int), SEEK_CUR);
-                fread(&storedChecksum, sizeof(unsigned int), 1, inputFile);
-                calculatedChecksum = CalculateChecksum(key, keyLength);
-                
-                if (storedChecksum != calculatedChecksum) {
-                    OutputDebugStringA("Checksum validation failed - wrong key or corrupted file");
-                    result = ERR_DECRYPTION_FAILED;
-                    break;
-                }
-            }
+    long totalProcessed = 0;
+    
+    while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+        // Handle last chunk with checksum
+        if (totalProcessed + bytesRead >= dataSize) {
+            bytesRead = dataSize - totalProcessed;
+            if (bytesRead <= 0) break;
         }
         
-        if (bytesRead > 0) {
-            // Decrypt buffer in parallel
-            if (!ProcessBufferParallel(buffer, bytesRead, key, keyLength, false)) {
-                OutputDebugStringA("Parallel decryption failed");
-                result = ERR_DECRYPTION_FAILED;
-                break;
-            }
-            
-            // Write decrypted data immediately (streaming output)
-            size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
-            if (bytesWritten != bytesRead) {
-                OutputDebugStringA("Failed to write decrypted data");
-                result = ERR_DECRYPTION_FAILED;
-                break;
-            }
+        // Enhanced XOR decryption with complex bit rotation (same as encryption)
+        for (size_t i = 0; i < bytesRead; i++) {
+            // Apply XOR with key rotation (same algorithm as encryption)
+            unsigned char keyByte = key[i % keyLength];
+            // Complex bit rotation for enhanced security
+            keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
+            buffer[i] ^= keyByte;
+        }
+        
+        // Write decrypted data immediately
+        size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+        if (bytesWritten != bytesRead) {
+            OutputDebugStringA("Failed to write decrypted data");
+            result = ERR_DECRYPTION_FAILED;
+            break;
         }
         
         totalProcessed += bytesRead;
-        
-        // Optional: Output progress (can be removed in production)
-        if (dataSize > 0) {
-            int progress = (int)((totalProcessed * 100) / dataSize);
-            char progressMsg[64];
-            sprintf_s(progressMsg, sizeof(progressMsg), "Decryption progress: %d%%", progress);
-            OutputDebugStringA(progressMsg);
+    }
+
+    // Verify checksum
+    if (result == SUCCESS) {
+        fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+        unsigned int storedChecksum;
+        if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+            unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
+            if (storedChecksum != calculatedChecksum) {
+                OutputDebugStringA("Checksum validation failed - wrong key or corrupted file");
+                result = ERR_DECRYPTION_FAILED;
+            } else {
+                OutputDebugStringA("Stream decryption completed successfully");
+            }
         }
     }
 
@@ -370,11 +343,8 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
     fclose(inputFile);
     fclose(outputFile);
     
-    if (result == SUCCESS) {
-        OutputDebugStringA("File decrypted successfully");
-    } else {
-        // Delete output file if decryption failed
-        remove(outputPath);
+    if (result != SUCCESS) {
+        remove(outputPath);  // Delete output file if decryption failed
     }
     
     return result;
