@@ -28,63 +28,93 @@ namespace TestWin
         }
 
         /// <summary>
-        /// 初始化内存DLL管理器，从文件加载DLL到内存
+        /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
         /// </summary>
         private void InitializeMemoryDll()
         {
             try
             {
-                // 构建DLL文件路径 - 假设DLL在应用程序目录或bin目录下
-                string appDir = Application.StartupPath;
-                string dllPath = System.IO.Path.Combine(appDir, "TestExportLib.vmp.dll");
+                const string dllName = "TestExportLib.vmp.dll";
                 
-                // 如果主目录找不到，尝试其他常见位置
-                if (!System.IO.File.Exists(dllPath))
+                // 显示加载信息
+                this.Text += " - 正在从内存加载DLL...";
+                
+                // 优先从嵌入资源加载DLL字节数组
+                byte[] dllBytes = null;
+                
+                try
                 {
-                    // 尝试相对路径
-                    string[] possiblePaths = {
-                        "TestExportLib.vmp.dll",
-                        @"..\..\..\TestExportLib\bin\Debug\TestExportLib.vmp.dll",
-                        @"..\..\..\TestExportLib\bin\Release\TestExportLib.vmp.dll",
-                        @"..\..\TestExportLib\TestExportLib.vmp.dll"
-                    };
-                    
-                    foreach (string path in possiblePaths)
+                    // 方法1：从嵌入资源加载（完全无硬盘痕迹）
+                    if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
                     {
-                        string fullPath = System.IO.Path.Combine(appDir, path);
-                        if (System.IO.File.Exists(fullPath))
-                        {
-                            dllPath = fullPath;
-                            break;
-                        }
+                        dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
+                        this.Text = this.Text.Replace("正在从内存加载DLL...", "DLL已从嵌入资源加载 [无硬盘痕迹]");
                     }
                 }
-
-                if (!System.IO.File.Exists(dllPath))
+                catch (Exception embedEx)
                 {
-                    MessageBox.Show($"找不到DLL文件: TestExportLib.vmp.dll\n搜索路径: {dllPath}\n\n请确保DLL文件存在于应用程序目录中。", 
-                        "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
+                    // 嵌入资源加载失败，尝试备用方案
+                    this.Text = this.Text.Replace("正在从内存加载DLL...", "嵌入资源加载失败，尝试备用方案...");
+                    
+                    // 方法2：备用方案 - 从硬盘文件加载（如果嵌入资源不可用）
+                    string[] fallbackPaths = {
+                        @"D:\work\code\ISOLib\other_project\TestWin\bin\Debug\TestExportLib.vmp.dll",
+                        System.IO.Path.Combine(Application.StartupPath, dllName),
+                        dllName,
+                        System.IO.Path.Combine(Application.StartupPath, @"..\..\..\TestExportLib\bin\Debug\" + dllName),
+                        System.IO.Path.Combine(Application.StartupPath, @"..\..\..\TestExportLib\bin\Release\" + dllName)
+                    };
+
+                    dllBytes = EmbeddedResourceManager.GetDllBytesWithFallback(dllName, fallbackPaths);
+                    this.Text = this.Text.Replace("嵌入资源加载失败，尝试备用方案...", "DLL已从硬盘加载到内存 [备用方案]");
                 }
 
-                // 从内存加载DLL
-                dllManager = new MemoryDllManager(dllPath);
+                if (dllBytes == null || dllBytes.Length == 0)
+                {
+                    throw new InvalidOperationException("获取到的DLL字节数组为空");
+                }
+
+                // 从字节数组创建内存DLL管理器（真正的内存加载）
+                dllManager = new MemoryDllManager(dllBytes);
                 
                 // 验证DLL是否成功加载
                 if (dllManager.IsLoaded)
                 {
-                    // 可选：在状态栏或日志中显示加载成功信息
-                    this.Text += " - DLL已从内存加载";
+                    // 显示成功信息和DLL大小
+                    this.Text += $" ({dllBytes.Length:N0} 字节)";
+                    
+                    // 可选：在调试模式下显示详细信息
+                    #if DEBUG
+                    string debugInfo = $"DLL加载成功！\n";
+                    debugInfo += $"大小: {dllBytes.Length:N0} 字节\n";
+                    debugInfo += $"来源: {(EmbeddedResourceManager.IsEmbeddedDllExists(dllName) ? "嵌入资源" : "硬盘文件")}\n";
+                    //debugInfo += $"内存地址: 0x{dllManager.GetFunctionAddress("StreamEncryptFile").ToString("X")}\n\n";
+                    debugInfo += "嵌入资源信息:\n" + EmbeddedResourceManager.GetEmbeddedResourceInfo();
+                    
+                    // 可以显示在调试输出或日志中
+                    System.Diagnostics.Debug.WriteLine(debugInfo);
+                    #endif
                 }
                 else
                 {
-                    MessageBox.Show("DLL从内存加载失败！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    throw new InvalidOperationException("DLL从内存加载失败");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"初始化内存DLL失败: {ex.Message}\n\n详细错误:\n{ex}", 
-                    "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                this.Text = "TestWin - DLL加载失败";
+                
+                string errorMsg = $"初始化内存DLL失败: {ex.Message}\n\n";
+                errorMsg += "可能的解决方案:\n";
+                errorMsg += "1. 确保TestExportLib.vmp.dll已正确编译并添加为嵌入资源\n";
+                errorMsg += "2. 检查DLL是否存在于指定路径\n";
+                errorMsg += "3. 确保DLL与当前平台（x86/x64）兼容\n\n";
+                errorMsg += $"详细错误:\n{ex}";
+                
+                // 显示资源调试信息
+                errorMsg += "\n\n当前嵌入资源:\n" + EmbeddedResourceManager.GetEmbeddedResourceInfo();
+                
+                MessageBox.Show(errorMsg, "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 dllManager = null;
             }
         }

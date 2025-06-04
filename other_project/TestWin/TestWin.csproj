@@ -48,6 +48,7 @@
   <ItemGroup>
     <Compile Include="DLLFromMemory.cs" />
     <Compile Include="MemoryDllManager.cs" />
+    <Compile Include="EmbeddedResourceManager.cs" />
     <Compile Include="Form1.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -87,5 +88,11 @@
       <Name>ISOLib</Name>
     </ProjectReference>
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="TestExportLib.vmp.dll">
+      <LogicalName>TestExportLib.vmp.dll</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+  <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
