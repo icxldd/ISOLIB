@@ -31,7 +31,7 @@ typedef union {
     } parts;
 } uint64_union_t;
 
-// NTP数据包结构 - x86对齐优化
+// NTP数据包结构 - 修复版本，使用字节数组
 #pragma pack(push, 1)
 struct NTPPacket {
     unsigned char li_vn_mode;       // LI (2 bits) + VN (3 bits) + Mode (3 bits)
@@ -41,10 +41,10 @@ struct NTPPacket {
     uint32_t root_delay;           // Root delay
     uint32_t root_dispersion;      // Root dispersion
     uint32_t reference_id;         // Reference identifier
-    uint64_union_t reference_timestamp;  // Reference timestamp
-    uint64_union_t origin_timestamp;     // Origin timestamp
-    uint64_union_t receive_timestamp;    // Receive timestamp
-    uint64_union_t transmit_timestamp;   // Transmit timestamp
+    unsigned char reference_timestamp[8];   // Reference timestamp (8 bytes)
+    unsigned char origin_timestamp[8];      // Origin timestamp (8 bytes)
+    unsigned char receive_timestamp[8];     // Receive timestamp (8 bytes)
+    unsigned char transmit_timestamp[8];    // Transmit timestamp (8 bytes)
 };
 #pragma pack(pop)
 
@@ -83,21 +83,23 @@ static const char* NTP_SERVERS[] = {
     "africa.pool.ntp.org"
 };
 
-// x86兼容的64位网络字节序转换
-timestamp_t ntohl64(uint64_union_t net_value) {
-    uint64_union_t result;
-    result.parts.high = ntohl(net_value.parts.low);
-    result.parts.low = ntohl(net_value.parts.high);
-    return result.value;
+// x86兼容的64位网络字节序转换 - 修复版本
+timestamp_t ntohl64_fixed(unsigned char* data) {
+    // NTP时间戳：前32位是秒，后32位是小数部分
+    uint32_t seconds = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+    // 我们只需要秒部分，忽略小数部分
+    return (timestamp_t)seconds;
 }
 
-uint64_union_t htonl64(timestamp_t host_value) {
-    uint64_union_t net_value;
-    uint64_union_t temp;
-    temp.value = host_value;
-    net_value.parts.high = htonl(temp.parts.low);
-    net_value.parts.low = htonl(temp.parts.high);
-    return net_value;
+void htonl64_fixed(timestamp_t host_value, unsigned char* data) {
+    // 只设置秒部分，小数部分设为0
+    uint32_t seconds = (uint32_t)host_value;
+    data[0] = (seconds >> 24) & 0xFF;
+    data[1] = (seconds >> 16) & 0xFF;
+    data[2] = (seconds >> 8) & 0xFF;
+    data[3] = seconds & 0xFF;
+    // 小数部分设为0
+    data[4] = data[5] = data[6] = data[7] = 0;
 }
 
 // 初始化Winsock
@@ -184,7 +186,7 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
         
         // 设置传输时间戳
         timestamp_t currentTime = GetCurrentNTPTime();
-        packet.transmit_timestamp = htonl64(currentTime);
+        htonl64_fixed(currentTime, packet.transmit_timestamp);
 
         // 发送NTP请求
         if (sendto(sock, (char*)&packet, sizeof(packet), 0, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) == SOCKET_ERROR) {
@@ -223,20 +225,38 @@ int __cdecl GetNTPTimestampFromServer(const char* server, timestamp_t* timestamp
             break;
         }
 
-        // 提取服务器时间戳
-        timestamp_t serverTime = ntohl64(packet.transmit_timestamp);
+        // 提取服务器时间戳 - 使用transmit_timestamp
+        timestamp_t serverTime = ntohl64_fixed(packet.transmit_timestamp);
+        
+        // 验证时间戳合理性
+        if (serverTime == 0) {
+            OutputDebugStringA("Received zero timestamp from server");
+            result = NTP_ERROR_INVALID_RESPONSE;
+            break;
+        }
         
         // 转换为Unix时间戳
         if (serverTime < NTP_UNIX_EPOCH_OFFSET) {
-            OutputDebugStringA("Invalid NTP timestamp");
+            char debugMsg[256];
+            sprintf_s(debugMsg, sizeof(debugMsg), "Invalid NTP timestamp: %I64d (too small)", serverTime);
+            OutputDebugStringA(debugMsg);
             result = NTP_ERROR_INVALID_RESPONSE;
             break;
         }
 
         *timestamp = serverTime - NTP_UNIX_EPOCH_OFFSET;
         
+        // 验证Unix时间戳的合理性（应该是2000年之后的时间）
+        if (*timestamp < 946684800) { // 2000年1月1日
+            char debugMsg[256];
+            sprintf_s(debugMsg, sizeof(debugMsg), "Converted timestamp seems too old: %I64d", *timestamp);
+            OutputDebugStringA(debugMsg);
+            result = NTP_ERROR_INVALID_RESPONSE;
+            break;
+        }
+        
         char debugMsg[256];
-        sprintf_s(debugMsg, sizeof(debugMsg), "NTP sync successful from %s, timestamp: %I64d", server, *timestamp);
+        sprintf_s(debugMsg, sizeof(debugMsg), "NTP sync successful from %s, NTP time: %I64d, Unix timestamp: %I64d", server, serverTime, *timestamp);
         OutputDebugStringA(debugMsg);
         
         result = NTP_SUCCESS;
@@ -291,7 +311,12 @@ int __cdecl GetNTPTimestamp(timestamp_t* timestamp) {
     OutputDebugStringA("All NTP servers failed, using local time as fallback");
     
     // 所有服务器都失败，使用本地时间作为备用
-    *timestamp = 0;
+    *timestamp = GetLocalTimestamp();
+    
+    char debugMsg[256];
+    sprintf_s(debugMsg, sizeof(debugMsg), "Using local timestamp as fallback: %I64d", *timestamp);
+    OutputDebugStringA(debugMsg);
+    
     return NTP_ERROR_ALL_SERVERS_FAILED;
 }
 

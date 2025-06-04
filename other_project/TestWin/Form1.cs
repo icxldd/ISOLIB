@@ -438,9 +438,29 @@ namespace TestWin
 
         private void button5_Click(object sender, EventArgs e)
         {
-            var  oi = GetNTPTimestamp(out var time);
-
-            richTextBox1.AppendText($"{time}");
+            richTextBox1.Clear();
+            richTextBox1.AppendText("=== NTP调试测试 ===\r\n");
+            
+            var result = GetNTPTimestamp(out var time);
+            
+            richTextBox1.AppendText($"返回码: {result} ({GetNTPErrorMessage(result)})\r\n");
+            richTextBox1.AppendText($"时间戳: {time}\r\n");
+            
+            if (time > 0) {
+                try {
+                    DateTime utcTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(time);
+                    DateTime localTime = utcTime.ToLocalTime();
+                    richTextBox1.AppendText($"UTC时间: {utcTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    richTextBox1.AppendText($"本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                } catch (Exception ex) {
+                    richTextBox1.AppendText($"时间转换失败: {ex.Message}\r\n");
+                }
+            }
+            
+            // 同时显示本地时间作为对比
+            long localTime2 = GetLocalTimestamp();
+            DateTime localDT = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTime2).ToLocalTime();
+            richTextBox1.AppendText($"本地系统时间戳: {localTime2} ({localDT:yyyy-MM-dd HH:mm:ss})\r\n");
         }
     }
 
