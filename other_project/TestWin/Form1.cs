@@ -12,19 +12,101 @@ using System.Windows.Forms;
 
 namespace TestWin
 {
-    // 进度回调委托 - 指定调用约定为Cdecl以匹配C++
-    [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-    public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);
 
     public partial class Form1 : Form
     {
+        // 内存DLL管理器实例
+        private MemoryDllManager dllManager;
+        private bool disposed = false;
+
         public Form1()
         {
             InitializeComponent();
+            
+            // 初始化内存DLL管理器
+            InitializeMemoryDll();
         }
+
+        /// <summary>
+        /// 初始化内存DLL管理器，从文件加载DLL到内存
+        /// </summary>
+        private void InitializeMemoryDll()
+        {
+            try
+            {
+                // 构建DLL文件路径 - 假设DLL在应用程序目录或bin目录下
+                string appDir = Application.StartupPath;
+                string dllPath = System.IO.Path.Combine(appDir, "TestExportLib.vmp.dll");
+                
+                // 如果主目录找不到，尝试其他常见位置
+                if (!System.IO.File.Exists(dllPath))
+                {
+                    // 尝试相对路径
+                    string[] possiblePaths = {
+                        "TestExportLib.vmp.dll",
+                        @"..\..\..\TestExportLib\bin\Debug\TestExportLib.vmp.dll",
+                        @"..\..\..\TestExportLib\bin\Release\TestExportLib.vmp.dll",
+                        @"..\..\TestExportLib\TestExportLib.vmp.dll"
+                    };
+                    
+                    foreach (string path in possiblePaths)
+                    {
+                        string fullPath = System.IO.Path.Combine(appDir, path);
+                        if (System.IO.File.Exists(fullPath))
+                        {
+                            dllPath = fullPath;
+                            break;
+                        }
+                    }
+                }
+
+                if (!System.IO.File.Exists(dllPath))
+                {
+                    MessageBox.Show($"找不到DLL文件: TestExportLib.vmp.dll\n搜索路径: {dllPath}\n\n请确保DLL文件存在于应用程序目录中。", 
+                        "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 从内存加载DLL
+                dllManager = new MemoryDllManager(dllPath);
+                
+                // 验证DLL是否成功加载
+                if (dllManager.IsLoaded)
+                {
+                    // 可选：在状态栏或日志中显示加载成功信息
+                    this.Text += " - DLL已从内存加载";
+                }
+                else
+                {
+                    MessageBox.Show("DLL从内存加载失败！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"初始化内存DLL失败: {ex.Message}\n\n详细错误:\n{ex}", 
+                    "DLL加载错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                dllManager = null;
+            }
+        }
+
+        /// <summary>
+        /// 检查DLL是否已加载的辅助方法
+        /// </summary>
+        private bool CheckDllLoaded()
+        {
+            if (dllManager == null || !dllManager.IsLoaded)
+            {
+                MessageBox.Show("DLL未加载或加载失败！请重启应用程序。", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+            return true;
+        }
+
         //加密
         private void button1_Click(object sender, EventArgs e)
         {
+            if (!CheckDllLoaded()) return;
+
             try
             {
                 string inputFile = textBox1.Text;
@@ -54,11 +136,11 @@ namespace TestWin
                     return;
                 }
 
-                // 加密文件
+                // 加密文件 - 使用内存DLL管理器
                 richTextBox1.Clear(); // 清空之前的日志
                 richTextBox1.AppendText($"开始加密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
                 
-                int result = StreamEncryptFile(inputFile, encryptedFile, key, OnProgress);
+                int result = dllManager.StreamEncryptFile(inputFile, encryptedFile, key, OnProgress);
                 
                 if (result == 0)
                 {
@@ -78,85 +160,6 @@ namespace TestWin
 
             lala();
         }
-
-        public enum T_PDU_IT
-        {
-            PDU_IT_IO_UNUM32 = 0x1000,
-            PDU_IT_IO_PROG_VOLTAGE = 0x1001,
-            PDU_IT_IO_BYTEARRAY = 0x1002,
-            PDU_IT_IO_FILTER = 0x1003,
-            PDU_IT_IO_EVENT_QUEUE_PROPERTY = 0x1004,
-            PDU_IT_RSC_STATUS = 0x1100,
-            PDU_IT_PARAM = 0x1200,
-            PDU_IT_RESULT = 0x1300,
-            PDU_IT_STATUS = 0x1301,
-            PDU_IT_ERROR = 0x1302,
-            PDU_IT_INFO = 0x1303,
-            PDU_IT_RSC_ID = 0x1400,
-            PDU_IT_RSC_CONFLICT = 0x1500,
-            PDU_IT_MODULE_ID = 0x1600,
-            PDU_IT_UNIQUE_RESP_ID_TABLE = 0x1700,
-            PDU_IT_VEHICLE_ID = 0x1800,
-            PDU_IT_ETH_SWITCH_STATE = 0x1801
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct PDU_RSC_STATUS_DATA
-        {
-            public uint hMod;
-            public uint ResourceId;
-            public uint ResourceStatus;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        public struct PDU_RSC_STATUS_ITEM
-        {
-            public T_PDU_IT ItemType;
-            [MarshalAs(UnmanagedType.LPStr)]
-            public string name;
-            public uint NumEntries;
-            public PDU_RSC_STATUS_DATA pResourceStatusData;
-        }
-
-
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void HelloWord(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
-
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern void HelloWord2(UInt32 hh);
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int StreamEncryptFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
-            [MarshalAs(UnmanagedType.LPStr)] string key,
-            ProgressCallback progressCallback = null);
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int StreamDecryptFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
-            [MarshalAs(UnmanagedType.LPStr)] string key,
-            ProgressCallback progressCallback = null);
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int ValidateEncryptedFile(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            [MarshalAs(UnmanagedType.LPStr)] string key);
-
-        // NTP时间同步函数声明 - x86兼容版本
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int GetNTPTimestamp(out long timestamp);
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern int GetNTPTimestampFromServer(
-            [MarshalAs(UnmanagedType.LPStr)] string server, 
-            out long timestamp, 
-            int timeoutMs);
-
-        [DllImport("TestExportLib.dll", CallingConvention = CallingConvention.Cdecl)]
-        public static extern long GetLocalTimestamp();
 
         // 进度回调方法 - 改为实例方法，支持UI线程安全更新
         private void OnProgress(string filePath, double progress)
@@ -181,6 +184,7 @@ namespace TestWin
                 richTextBox1.ScrollToCaret(); // 自动滚动到最新内容
             }
         }
+        
         static void lala()
         {
             // 原来的测试代码已移动到三个按钮的点击事件中
@@ -208,6 +212,8 @@ namespace TestWin
         //解密
         private void button2_Click(object sender, EventArgs e)
         {
+            if (!CheckDllLoaded()) return;
+
             try
             {
                 string inputFile = textBox1.Text;
@@ -249,11 +255,11 @@ namespace TestWin
                     decryptedFile = System.IO.Path.Combine(directory, fileNameWithoutExt + "_decrypted" + extension);
                 }
 
-                // 解密文件
+                // 解密文件 - 使用内存DLL管理器
                 richTextBox1.Clear(); // 清空之前的日志
                 richTextBox1.AppendText($"开始解密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
                 
-                int result = StreamDecryptFile(inputFile, decryptedFile, key, OnProgress);
+                int result = dllManager.StreamDecryptFile(inputFile, decryptedFile, key, OnProgress);
                 
                 if (result == 0)
                 {
@@ -276,6 +282,8 @@ namespace TestWin
         //验证文件是否有效加密文件
         private void button3_Click(object sender, EventArgs e)
         {
+            if (!CheckDllLoaded()) return;
+
             try
             {
                 string inputFile = textBox1.Text;
@@ -299,8 +307,8 @@ namespace TestWin
                     return;
                 }
 
-                // 验证加密文件
-                int result = ValidateEncryptedFile(inputFile, key);
+                // 验证加密文件 - 使用内存DLL管理器
+                int result = dllManager.ValidateEncryptedFile(inputFile, key);
                 if (result == 1)
                 {
                     MessageBox.Show("文件验证成功！\n这是一个有效的加密文件，并且密钥正确。", "验证成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -353,12 +361,14 @@ namespace TestWin
         // 测试NTP时间同步
         private void TestNTPSync()
         {
+            if (!CheckDllLoaded()) return;
+
             try
             {
                 richTextBox1.AppendText("=== NTP时间同步测试 ===\r\n");
                 
                 long timestamp;
-                int result = GetNTPTimestamp(out timestamp);
+                int result = dllManager.GetNTPTimestamp(out timestamp);
                 
                 if (result == 0) // NTP_SUCCESS
                 {
@@ -377,7 +387,7 @@ namespace TestWin
                     richTextBox1.AppendText($"NTP同步失败: {errorMsg} (错误码: {result})\r\n");
                     
                     // 显示本地时间作为备用
-                    long localTimestamp = GetLocalTimestamp();
+                    long localTimestamp = dllManager.GetLocalTimestamp();
                     DateTime localTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTimestamp).ToLocalTime();
                     richTextBox1.AppendText($"使用本地时间: {localTimestamp} ({localTime:yyyy-MM-dd HH:mm:ss})\r\n");
                 }
@@ -393,12 +403,14 @@ namespace TestWin
         // 测试指定服务器NTP同步
         private void TestNTPSyncFromServer(string server)
         {
+            if (!CheckDllLoaded()) return;
+
             try
             {
                 richTextBox1.AppendText($"=== 测试服务器: {server} ===\r\n");
                 
                 long timestamp;
-                int result = GetNTPTimestampFromServer(server, out timestamp, 5000); // 5秒超时
+                int result = dllManager.GetNTPTimestampFromServer(server, out timestamp, 5000); // 5秒超时
                 
                 if (result == 0) // NTP_SUCCESS
                 {
@@ -438,10 +450,12 @@ namespace TestWin
 
         private void button5_Click(object sender, EventArgs e)
         {
+            if (!CheckDllLoaded()) return;
+
             richTextBox1.Clear();
             richTextBox1.AppendText("=== NTP调试测试 ===\r\n");
             
-            var result = GetNTPTimestamp(out var time);
+            var result = dllManager.GetNTPTimestamp(out var time);
             
             richTextBox1.AppendText($"返回码: {result} ({GetNTPErrorMessage(result)})\r\n");
             richTextBox1.AppendText($"时间戳: {time}\r\n");
@@ -458,10 +472,11 @@ namespace TestWin
             }
             
             // 同时显示本地时间作为对比
-            long localTime2 = GetLocalTimestamp();
+            long localTime2 = dllManager.GetLocalTimestamp();
             DateTime localDT = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(localTime2).ToLocalTime();
             richTextBox1.AppendText($"本地系统时间戳: {localTime2} ({localDT:yyyy-MM-dd HH:mm:ss})\r\n");
         }
+
     }
 
     public static class StructBaseExtensions
