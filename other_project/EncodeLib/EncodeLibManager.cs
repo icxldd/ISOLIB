@@ -91,7 +91,7 @@ namespace EncodeLib
             {
                 string errorMsg = $"初始化内存DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
-                throw new InvalidOperationException(errorMsg, ex);
+                //throw new InvalidOperationException(errorMsg, ex);
             }
         }
 
