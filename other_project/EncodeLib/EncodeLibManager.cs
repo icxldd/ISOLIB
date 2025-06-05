@@ -51,7 +51,7 @@ namespace EncodeLib
         {
             try
             {
-                const string dllName = "TestExportLib.vmp.dll";
+                const string dllName = "ExportLib.vmp.dll";
                 
                 // 优先从嵌入资源加载DLL字节数组
                 byte[] dllBytes = null;
