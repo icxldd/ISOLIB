@@ -1,4 +1,5 @@
 ﻿D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(520,5): warning MSB8004: Output 目录未以斜杠结尾。  此生成实例将添加斜杠，因为必须有这个斜杠才能正确计算 Output 目录。
+D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(534,5): warning MSB8028: 中间目录(Release\)包含从另一个项目(TestExportLib.vcxproj)共享的文件。   这会导致错误的清除和重新生成行为。
   pch.cpp
   dllmain.cpp
   encode.cpp
@@ -35,11 +36,11 @@ D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(277,13): warning C4273: 
       参见“GetNTPTimestamp”的前一个定义
   
   Pduapi.cpp
-    正在创建库 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\TestExportLib.lib 和对象 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\TestExportLib.exp
+    正在创建库 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.lib 和对象 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.exp
   正在生成代码
   Previous IPDB not found, fall back to full compilation.
   All 14 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
   已完成代码的生成
-  TestExportLib.vcxproj -> D:\work\code\ISOLib\other_project\TestWin\bin\Debug\TestExportLib.dll
+  TestExportLib.vcxproj -> D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.dll
   'pwsh.exe' 不是内部或外部命令，也不是可运行的程序
   或批处理文件。

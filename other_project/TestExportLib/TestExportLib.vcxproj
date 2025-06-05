@@ -24,6 +24,7 @@
     <ProjectGuid>{2dce6fa4-12e2-458a-ad49-5c26dd70d486}</ProjectGuid>
     <RootNamespace>TestExportLib</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <ProjectName>ExportLib</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
