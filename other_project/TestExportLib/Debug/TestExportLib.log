@@ -3,7 +3,6 @@
   dllmain.cpp
   encode.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
-  ntp.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\encode.h(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   (编译源文件“/encode.cpp”)
   
@@ -20,17 +19,18 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(148,5): warning C4273
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(258,40): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
+  ntp.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
 D:\work\code\ISOLib\other_project\TestExportLib\ntp.h(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   (编译源文件“/ntp.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(169,38): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(170,38): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
   (编译源文件“/ntp.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(172,36): warning C4996: 'gethostbyname': Use getaddrinfo() or GetAddrInfoW() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(173,36): warning C4996: 'gethostbyname': Use getaddrinfo() or GetAddrInfoW() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
   (编译源文件“/ntp.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(276,13): warning C4273: “GetNTPTimestamp”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(277,13): warning C4273: “GetNTPTimestamp”: dll 链接不一致
   (编译源文件“/ntp.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\ntp.h(30,28):
       参见“GetNTPTimestamp”的前一个定义
