@@ -49,14 +49,6 @@ struct NTPPacket {
 
 // 全球NTP时间服务器列表（按地理位置优化排序）
 static const char* NTP_SERVERS[] = {
-    // 亚洲地区优先（适合中国用户）
-    "cn.pool.ntp.org",          // 中国NTP池
-    "asia.pool.ntp.org",        // 亚洲NTP池
-    "hk.pool.ntp.org",          // 香港NTP池
-    "tw.pool.ntp.org",          // 台湾NTP池
-    "jp.pool.ntp.org",          // 日本NTP池
-    "kr.pool.ntp.org",          // 韩国NTP池
-    "sg.pool.ntp.org",          // 新加坡NTP池
     
     // 全球通用服务器
     "pool.ntp.org",             // 全球NTP池
@@ -69,6 +61,15 @@ static const char* NTP_SERVERS[] = {
     "uk.pool.ntp.org",          // 英国NTP池
     "fr.pool.ntp.org",          // 法国NTP池
     
+    // 亚洲地区优先（适合中国用户）
+    "cn.pool.ntp.org",          // 中国NTP池
+    "asia.pool.ntp.org",        // 亚洲NTP池
+    "hk.pool.ntp.org",          // 香港NTP池
+    "tw.pool.ntp.org",          // 台湾NTP池
+    "jp.pool.ntp.org",          // 日本NTP池
+    "kr.pool.ntp.org",          // 韩国NTP池
+    "sg.pool.ntp.org",          // 新加坡NTP池
+
     // 北美地区
     "north-america.pool.ntp.org", // 北美NTP池
     "us.pool.ntp.org",          // 美国NTP池
@@ -288,7 +289,7 @@ int __cdecl GetNTPTimestamp(timestamp_t* timestamp) {
         sprintf_s(debugMsg, sizeof(debugMsg), "尝试NTP服务器: %s (%d/%d)", NTP_SERVERS[i], i + 1, serverCount);
         //OutputDebugStringA(debugMsg);
         
-        int result = GetNTPTimestampFromServer(NTP_SERVERS[i], timestamp, 3000); // 3秒超时
+        int result = GetNTPTimestampFromServer(NTP_SERVERS[i], timestamp, 1000); // 3秒超时
         
         if (result == NTP_SUCCESS) {
             sprintf_s(debugMsg, sizeof(debugMsg), "NTP时间同步成功，服务器: %s", NTP_SERVERS[i]);
@@ -310,12 +311,8 @@ int __cdecl GetNTPTimestamp(timestamp_t* timestamp) {
     
     //OutputDebugStringA("所有NTP服务器均失败，使用本地系统时间作为备用方案");
     
-    // 所有NTP服务器都失败时，使用本地时间作为备用方案
-    *timestamp = GetLocalTimestamp();
-    
-    char debugMsg[256];
-    sprintf_s(debugMsg, sizeof(debugMsg), "使用本地时间戳作为备用: %I64d", *timestamp);
-    //OutputDebugStringA(debugMsg);
+    // 所有NTP服务器都失败时，设置0
+    *timestamp = 0;
     
     return NTP_ERROR_ALL_SERVERS_FAILED;
 }
