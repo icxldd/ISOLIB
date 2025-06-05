@@ -13,7 +13,7 @@ void HelloWord(PDU_RSC_STATUS_ITEM** pItems,PDU_RSC_STATUS_ITEM* pItem,UINT8 *p2
 
     swprintf(debugString, 256, L"itemType:%lu,numEntries:%lu",  p1, p222);
     pItems[0]->NumEntries = 2;
-    OutputDebugString(debugString);
+    //OutputDebugString(debugString);
 
     // 在这里实现函数的功能
     // 例如，打印结构体的成员
