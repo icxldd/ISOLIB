@@ -412,6 +412,317 @@ namespace TestWin
                 richTextBox1.AppendText($"获取本地时间戳失败: {ex.Message}\r\n");
             }
         }
+
+        /// <summary>
+        /// 将文件转换为Base64并保存到当前目录
+        /// </summary>
+        /// <returns>转换是否成功</returns>
+        public bool ConvertFileToBase64AndSave()
+        {
+            try
+            {
+                // 获取文件路径
+                string filePath = textBox1.Text;
+                
+                // 验证文件路径
+                if (string.IsNullOrWhiteSpace(filePath))
+                {
+                    richTextBox1.AppendText("错误：请先选择文件路径！\r\n");
+                    MessageBox.Show("请先选择文件路径！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return false;
+                }
+                
+                if (!System.IO.File.Exists(filePath))
+                {
+                    richTextBox1.AppendText($"错误：文件不存在：{filePath}\r\n");
+                    MessageBox.Show($"文件不存在：{filePath}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return false;
+                }
+                
+                richTextBox1.AppendText($"开始转换文件：{System.IO.Path.GetFileName(filePath)}\r\n");
+                
+                // 读取文件数据
+                byte[] fileData = System.IO.File.ReadAllBytes(filePath);
+                richTextBox1.AppendText($"文件大小：{fileData.Length:N0} 字节\r\n");
+                
+                // 转换为Base64
+                string base64String = Convert.ToBase64String(fileData);
+                richTextBox1.AppendText($"Base64长度：{base64String.Length:N0} 字符\r\n");
+                
+                // 生成输出文件名
+                string originalFileName = System.IO.Path.GetFileNameWithoutExtension(filePath);
+                string outputFileName = $"{originalFileName}_base64.txt";
+                string outputPath = System.IO.Path.Combine(Application.StartupPath, outputFileName);
+                
+                // 写入Base64数据到文件
+                System.IO.File.WriteAllText(outputPath, base64String, Encoding.UTF8);
+                
+                richTextBox1.AppendText($"Base64数据已保存到：{outputPath}\r\n");
+                richTextBox1.AppendText("转换完成！\r\n");
+                
+                MessageBox.Show($"文件转换成功！\n\n原文件：{filePath}\n输出文件：{outputPath}\n\nBase64长度：{base64String.Length:N0} 字符", 
+                    "转换成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"文件转换失败：{ex.Message}";
+                richTextBox1.AppendText($"错误：{errorMsg}\r\n");
+                MessageBox.Show(errorMsg, "转换失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 将Base64文件还原为原始文件
+        /// </summary>
+        /// <param name="base64FilePath">Base64文件路径</param>
+        /// <returns>还原是否成功</returns>
+        public bool ConvertBase64ToFile(string base64FilePath = null)
+        {
+            try
+            {
+                // 如果没有指定Base64文件路径，使用文件选择对话框
+                if (string.IsNullOrWhiteSpace(base64FilePath))
+                {
+                    OpenFileDialog openFileDialog = new OpenFileDialog();
+                    openFileDialog.Filter = "Base64文件 (*.txt)|*.txt|所有文件 (*.*)|*.*";
+                    openFileDialog.Title = "选择Base64文件";
+                    openFileDialog.InitialDirectory = Application.StartupPath;
+                    
+                    if (openFileDialog.ShowDialog() != DialogResult.OK)
+                    {
+                        return false;
+                    }
+                    
+                    base64FilePath = openFileDialog.FileName;
+                }
+                
+                if (!System.IO.File.Exists(base64FilePath))
+                {
+                    richTextBox1.AppendText($"错误：Base64文件不存在：{base64FilePath}\r\n");
+                    return false;
+                }
+                
+                richTextBox1.AppendText($"开始还原Base64文件：{System.IO.Path.GetFileName(base64FilePath)}\r\n");
+                
+                // 读取Base64数据
+                string base64String = System.IO.File.ReadAllText(base64FilePath, Encoding.UTF8);
+                richTextBox1.AppendText($"Base64长度：{base64String.Length:N0} 字符\r\n");
+                
+                // 从Base64转换为字节数组
+                byte[] fileData = Convert.FromBase64String(base64String);
+                richTextBox1.AppendText($"还原文件大小：{fileData.Length:N0} 字节\r\n");
+                
+                // 生成输出文件名
+                string base64FileName = System.IO.Path.GetFileNameWithoutExtension(base64FilePath);
+                string outputFileName = base64FileName.Replace("_base64", "_restored");
+                string outputPath = System.IO.Path.Combine(Application.StartupPath, outputFileName);
+                
+                // 如果输出文件已存在，添加时间戳
+                if (System.IO.File.Exists(outputPath))
+                {
+                    string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                    outputPath = System.IO.Path.Combine(Application.StartupPath, $"{outputFileName}_{timestamp}");
+                }
+                
+                // 写入还原的文件数据
+                System.IO.File.WriteAllBytes(outputPath, fileData);
+                
+                richTextBox1.AppendText($"文件已还原到：{outputPath}\r\n");
+                richTextBox1.AppendText("还原完成！\r\n");
+                
+                MessageBox.Show($"Base64文件还原成功！\n\nBase64文件：{base64FilePath}\n还原文件：{outputPath}\n\n文件大小：{fileData.Length:N0} 字节", 
+                    "还原成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                
+                return true;
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"Base64文件还原失败：{ex.Message}";
+                richTextBox1.AppendText($"错误：{errorMsg}\r\n");
+                MessageBox.Show(errorMsg, "还原失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 批量转换目录中的所有文件为Base64
+        /// </summary>
+        /// <param name="directoryPath">目录路径</param>
+        /// <param name="filePattern">文件模式（如 *.dll, *.exe）</param>
+        /// <returns>转换是否成功</returns>
+        public bool BatchConvertToBase64(string directoryPath = null, string filePattern = "*.*")
+        {
+            try
+            {
+                // 如果没有指定目录，使用文件夹选择对话框
+                if (string.IsNullOrWhiteSpace(directoryPath))
+                {
+                    FolderBrowserDialog folderDialog = new FolderBrowserDialog();
+                    folderDialog.Description = "选择要批量转换的目录";
+                    folderDialog.SelectedPath = Application.StartupPath;
+                    
+                    if (folderDialog.ShowDialog() != DialogResult.OK)
+                    {
+                        return false;
+                    }
+                    
+                    directoryPath = folderDialog.SelectedPath;
+                }
+                
+                if (!System.IO.Directory.Exists(directoryPath))
+                {
+                    richTextBox1.AppendText($"错误：目录不存在：{directoryPath}\r\n");
+                    return false;
+                }
+                
+                richTextBox1.AppendText($"开始批量转换目录：{directoryPath}\r\n");
+                richTextBox1.AppendText($"文件模式：{filePattern}\r\n");
+                
+                // 获取目录中的所有文件
+                string[] files = System.IO.Directory.GetFiles(directoryPath, filePattern);
+                
+                if (files.Length == 0)
+                {
+                    richTextBox1.AppendText("目录中没有找到匹配的文件！\r\n");
+                    return false;
+                }
+                
+                richTextBox1.AppendText($"找到 {files.Length} 个文件\r\n");
+                
+                int successCount = 0;
+                int failCount = 0;
+                
+                // 逐个转换文件
+                foreach (string file in files)
+                {
+                    try
+                    {
+                        // 临时设置textBox1的值
+                        string originalText = textBox1.Text;
+                        textBox1.Text = file;
+                        
+                        richTextBox1.AppendText($"\n正在转换：{System.IO.Path.GetFileName(file)}\r\n");
+                        
+                        if (ConvertFileToBase64AndSave())
+                        {
+                            successCount++;
+                        }
+                        else
+                        {
+                            failCount++;
+                        }
+                        
+                        // 恢复textBox1的值
+                        textBox1.Text = originalText;
+                    }
+                    catch (Exception ex)
+                    {
+                        richTextBox1.AppendText($"转换文件 {System.IO.Path.GetFileName(file)} 失败：{ex.Message}\r\n");
+                        failCount++;
+                    }
+                }
+                
+                richTextBox1.AppendText($"\n批量转换完成！\r\n");
+                richTextBox1.AppendText($"成功：{successCount} 个文件\r\n");
+                richTextBox1.AppendText($"失败：{failCount} 个文件\r\n");
+                
+                MessageBox.Show($"批量转换完成！\n\n成功：{successCount} 个文件\n失败：{failCount} 个文件", 
+                    "批量转换完成", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                
+                return successCount > 0;
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"批量转换失败：{ex.Message}";
+                richTextBox1.AppendText($"错误：{errorMsg}\r\n");
+                MessageBox.Show(errorMsg, "批量转换失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 快捷调用：转换textBox1中的文件为Base64（可绑定到按钮点击事件）
+        /// </summary>
+        private void ConvertToBase64_Click(object sender, EventArgs e)
+        {
+            richTextBox1.Clear();
+            richTextBox1.AppendText("=== 文件转Base64 ===\r\n");
+            ConvertFileToBase64AndSave();
+        }
+
+        /// <summary>
+        /// 快捷调用：Base64文件还原（可绑定到按钮点击事件）
+        /// </summary>
+        private void ConvertFromBase64_Click(object sender, EventArgs e)
+        {
+            richTextBox1.Clear();
+            richTextBox1.AppendText("=== Base64文件还原 ===\r\n");
+            ConvertBase64ToFile();
+        }
+
+        /// <summary>
+        /// 快捷调用：批量转换目录中的DLL文件为Base64（可绑定到按钮点击事件）
+        /// </summary>
+        private void BatchConvertDLLs_Click(object sender, EventArgs e)
+        {
+            richTextBox1.Clear();
+            richTextBox1.AppendText("=== 批量转换DLL文件 ===\r\n");
+            BatchConvertToBase64(null, "*.dll");
+        }
+
+        /// <summary>
+        /// 专用于DLL文件的转换方法
+        /// </summary>
+        /// <param name="dllFilePath">DLL文件路径，为空时使用textBox1.Text</param>
+        /// <returns>转换是否成功</returns>
+        public bool ConvertDllToBase64(string dllFilePath = null)
+        {
+            try
+            {
+                // 如果没有指定路径，使用textBox1的值
+                if (string.IsNullOrWhiteSpace(dllFilePath))
+                {
+                    dllFilePath = textBox1.Text;
+                }
+
+                // 验证是否为DLL文件
+                if (!dllFilePath.EndsWith(".dll", StringComparison.OrdinalIgnoreCase))
+                {
+                    richTextBox1.AppendText("警告：选择的文件不是DLL文件\r\n");
+                }
+
+                // 临时设置textBox1的值
+                string originalText = textBox1.Text;
+                textBox1.Text = dllFilePath;
+
+                // 调用转换方法
+                bool result = ConvertFileToBase64AndSave();
+
+                // 恢复textBox1的值
+                textBox1.Text = originalText;
+
+                if (result)
+                {
+                    richTextBox1.AppendText("提示：可以将生成的Base64数据用于无痕加载方案\r\n");
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"DLL转换失败：{ex.Message}\r\n");
+                return false;
+            }
+        }
+
+        private void button3_Click_1(object sender, EventArgs e)
+        {
+            var b= ConvertDllToBase64(textBox1.Text);
+            MessageBox.Show("转换是否成功:"+b);
+        }
     }
 
     public static class StructBaseExtensions

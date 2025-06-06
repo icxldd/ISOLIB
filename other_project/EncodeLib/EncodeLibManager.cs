@@ -41,57 +41,90 @@ namespace EncodeLib
         /// </summary>
         private EncodeLibManager()
         {
-            InitializeMemoryDll();
+            InitializeMemoryDll(GobalData.DllData);
         }
 
         /// <summary>
-        /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
+        /// 从Base64字符串转换为字节数组
         /// </summary>
-        private void InitializeMemoryDll()
+        /// <param name="base64String">Base64字符串</param>
+        /// <returns>字节数组</returns>
+        public static byte[] ConvertBase64ToBytes(string base64String)
         {
             try
             {
-                const string dllName = "ExportLib.vmp.dll";
-                
-                // 优先从嵌入资源加载DLL字节数组
-                byte[] dllBytes = null;
-                
-                try
+                // 清理Base64字符串（移除可能的换行符、空格等）
+                string cleanBase64 = base64String.Replace("\r", "").Replace("\n", "").Replace(" ", "");
+
+                // 转换为字节数组
+                byte[] bytes = Convert.FromBase64String(cleanBase64);
+
+                return bytes;
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Base64转换失败: {ex.Message}", ex);
+            }
+        }
+
+
+        /// <summary>
+        /// 清除内存痕迹
+        /// </summary>
+        /// <param name="data">要清除的字节数组</param>
+        private void ClearMemoryTraces(byte[] data)
+        {
+            if (data != null)
+            {
+                // 覆盖原始字节数组
+                for (int i = 0; i < data.Length; i++)
                 {
-                    // 从嵌入资源加载（完全无硬盘痕迹）
-                    if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
-                    {
-                        dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
-                        System.Diagnostics.Debug.WriteLine("EncodeLib: DLL已从嵌入资源加载 [无硬盘痕迹]");
-                    }
+                    data[i] = 0;
                 }
-                catch (Exception embedEx)
-                {
-                    // 嵌入资源加载失败，抛出异常
-                    throw new InvalidOperationException($"嵌入资源DLL加载失败: {embedEx.Message}", embedEx);
-                }
+
+                // 强制垃圾回收
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
+            }
+        }
+
+        /// <summary>
+        /// 从Base64字符串初始化内存DLL（完全无文件痕迹）
+        /// </summary>
+        /// <param name="base64DllData">DLL的Base64字符串数据</param>
+        private void InitializeMemoryDll(string base64DllData)
+        {
+            try
+            {
+                // 从Base64转换为字节数组
+                byte[] dllBytes = ConvertBase64ToBytes(base64DllData);
 
                 if (dllBytes == null || dllBytes.Length == 0)
                 {
-                    throw new InvalidOperationException("获取到的DLL字节数组为空");
+                    throw new InvalidOperationException("Base64转换后的字节数组为空");
                 }
+
+                System.Diagnostics.Debug.WriteLine($"EncodeLib: 从Base64加载DLL，大小: {dllBytes.Length:N0} 字节");
 
                 // 从字节数组创建内存DLL管理器（真正的内存加载）
                 dllManager = new MemoryDllManager(dllBytes);
-                
+
                 // 验证DLL是否成功加载
                 if (!dllManager.IsLoaded)
                 {
                     throw new InvalidOperationException("DLL从内存加载失败");
                 }
 
-                System.Diagnostics.Debug.WriteLine($"EncodeLib: DLL加载成功！大小: {dllBytes.Length:N0} 字节");
+                // 立即清除内存中的DLL字节数组痕迹
+                ClearMemoryTraces(dllBytes);
+
+                System.Diagnostics.Debug.WriteLine("EncodeLib: DLL从Base64无痕加载成功！");
             }
             catch (Exception ex)
             {
-                string errorMsg = $"初始化内存DLL失败: {ex.Message}";
+                string errorMsg = $"从Base64初始化内存DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
-                //throw new InvalidOperationException(errorMsg, ex);
             }
         }
 
@@ -111,7 +144,7 @@ namespace EncodeLib
         public int EncryptFile(string inputFilePath, string outputFilePath, string key, ProgressCallback progressCallback = null)
         {
             CheckDllLoaded();
-            
+
             try
             {
                 return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, key, progressCallback);
@@ -134,7 +167,7 @@ namespace EncodeLib
         public int DecryptFile(string inputFilePath, string outputFilePath, string key, ProgressCallback progressCallback = null)
         {
             CheckDllLoaded();
-            
+
             try
             {
                 return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, key, progressCallback);
@@ -146,7 +179,7 @@ namespace EncodeLib
             }
         }
 
-       
+
 
         /// <summary>
         /// 获取NTP时间戳
@@ -157,7 +190,7 @@ namespace EncodeLib
         {
             CheckDllLoaded();
             timestamp = 0;
-            
+
             try
             {
                 return dllManager.GetNTPTimestamp(out timestamp);
@@ -210,7 +243,7 @@ namespace EncodeLib
                 dllManager?.Dispose();
                 dllManager = null;
                 disposed = true;
-                
+
                 lock (lockObject)
                 {
                     if (instance == this)
@@ -229,4 +262,5 @@ namespace EncodeLib
             Dispose();
         }
     }
-} 
+    
+}
