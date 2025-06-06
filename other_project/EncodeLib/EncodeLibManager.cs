@@ -41,7 +41,8 @@ namespace EncodeLib
         /// </summary>
         private EncodeLibManager()
         {
-            InitializeMemoryDll(GobalData.DllData);
+            //InitializeMemoryDll(GobalData.DllData);
+            InitializeMemoryDll();
         }
 
         /// <summary>
@@ -125,6 +126,61 @@ namespace EncodeLib
             {
                 string errorMsg = $"从Base64初始化内存DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
+            }
+        }
+
+
+
+
+
+        /// <summary>
+        /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
+        /// </summary>
+        private void InitializeMemoryDll()
+        {
+            try
+            {
+                const string dllName = "ExportLib.dll";
+
+                // 优先从嵌入资源加载DLL字节数组
+                byte[] dllBytes = null;
+
+                try
+                {
+                    // 从嵌入资源加载（完全无硬盘痕迹）
+                    if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
+                    {
+                        dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
+                        System.Diagnostics.Debug.WriteLine("EncodeLib: DLL已从嵌入资源加载 [无硬盘痕迹]");
+                    }
+                }
+                catch (Exception embedEx)
+                {
+                    // 嵌入资源加载失败，抛出异常
+                    throw new InvalidOperationException($"嵌入资源DLL加载失败: {embedEx.Message}", embedEx);
+                }
+
+                if (dllBytes == null || dllBytes.Length == 0)
+                {
+                    throw new InvalidOperationException("获取到的DLL字节数组为空");
+                }
+
+                // 从字节数组创建内存DLL管理器（真正的内存加载）
+                dllManager = new MemoryDllManager(dllBytes);
+
+                // 验证DLL是否成功加载
+                if (!dllManager.IsLoaded)
+                {
+                    throw new InvalidOperationException("DLL从内存加载失败");
+                }
+
+                System.Diagnostics.Debug.WriteLine($"EncodeLib: DLL加载成功！大小: {dllBytes.Length:N0} 字节");
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"初始化内存DLL失败: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
+                //throw new InvalidOperationException(errorMsg, ex);
             }
         }
 
