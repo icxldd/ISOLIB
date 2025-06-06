@@ -22,358 +22,512 @@
 #define ERR_DECRYPTION_FAILED -4          // 解密操作失败
 #define ERR_INVALID_HEADER -5             // 无效文件头
 #define ERR_THREAD_CREATION_FAILED -6     // 线程创建失败
+#define ERR_INVALID_PARAMETER -7          // 无效参数
+#define ERR_PRIVATE_KEY_NOT_SET -8        // 私钥未设置
+
+// ========== 双密钥系统全局变量 ==========
+static unsigned char* g_privateKey = nullptr;
+static int g_privateKeyLength = 0;
+static CRITICAL_SECTION g_keySection;
+static bool g_keyInitialized = false;
+
+// ========== 双密钥系统函数实现 ==========
+
+// 初始化私钥
+int InitStreamFile(const char* privateKey) {
+	if (!privateKey) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化临界区（只初始化一次）
+	if (!g_keyInitialized) {
+		InitializeCriticalSection(&g_keySection);
+		g_keyInitialized = true;
+	}
+
+	EnterCriticalSection(&g_keySection);
+
+	// 清理之前的私钥
+	if (g_privateKey) {
+		SecureZeroMemory(g_privateKey, g_privateKeyLength);
+		free(g_privateKey);
+		g_privateKey = nullptr;
+		g_privateKeyLength = 0;
+	}
+
+	// 存储新私钥（支持任意长度）
+	g_privateKeyLength = strlen(privateKey);
+	if (g_privateKeyLength == 0) {
+		LeaveCriticalSection(&g_keySection);
+		return ERR_INVALID_PARAMETER;
+	}
+
+	g_privateKey = (unsigned char*)malloc(g_privateKeyLength + 1);
+	if (!g_privateKey) {
+		g_privateKeyLength = 0;
+		LeaveCriticalSection(&g_keySection);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	memcpy(g_privateKey, privateKey, g_privateKeyLength);
+	g_privateKey[g_privateKeyLength] = '\0';
+
+	LeaveCriticalSection(&g_keySection);
+
+	return SUCCESS;
+}
+
+// 清理私钥
+void ClearPrivateKey() {
+	if (!g_keyInitialized) return;
+
+	EnterCriticalSection(&g_keySection);
+
+	if (g_privateKey) {
+		SecureZeroMemory(g_privateKey, g_privateKeyLength);
+		free(g_privateKey);
+		g_privateKey = nullptr;
+		g_privateKeyLength = 0;
+	}
+
+	LeaveCriticalSection(&g_keySection);
+}
+
+// 检查私钥是否已设置
+int IsPrivateKeySet() {
+	if (!g_keyInitialized) return 0;
+
+	EnterCriticalSection(&g_keySection);
+	int result = (g_privateKey != nullptr && g_privateKeyLength > 0) ? 1 : 0;
+	LeaveCriticalSection(&g_keySection);
+
+	return result;
+}
+
+// 组合私钥和公钥生成最终加密密钥
+unsigned char* CombineKeys(const unsigned char* publicKey, int* combinedLength) {
+	if (!g_privateKey || !publicKey) return nullptr;
+
+	int pubKeyLen = strlen((const char*)publicKey);
+	if (pubKeyLen == 0) return nullptr;
+
+	// 使用交错组合算法
+	int totalLen = g_privateKeyLength + pubKeyLen;
+	unsigned char* combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) return nullptr;
+
+	// 交错组合两个密钥，增强安全性
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			// 偶数位置使用私钥
+			combinedKey[i] = g_privateKey[i / 2 % g_privateKeyLength];
+		}
+		else {
+			// 奇数位置使用公钥
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		// 应用位运算增强混合效果
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+
+	combinedKey[totalLen] = '\0';
+	*combinedLength = totalLen;
+
+	return combinedKey;
+}
 
 // 计算数据校验和用于文件完整性验证
 unsigned int CalculateChecksum(const unsigned char* data, size_t length) {
-    unsigned int checksum = 0;
-    for (size_t i = 0; i < length; i++) {
-        checksum = (checksum << 1) ^ data[i];
-    }
-    return checksum;
+	unsigned int checksum = 0;
+	for (size_t i = 0; i < length; i++) {
+		checksum = (checksum << 1) ^ data[i];
+	}
+	return checksum;
 }
 
-// 优化的流式文件加密函数（支持复杂位旋转和大缓冲区高性能处理）
-int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* key, ProgressCallback progressCallback) {
-    FILE* inputFile = NULL;
-    FILE* outputFile = NULL;
-    unsigned char* buffer = NULL;
-    int result = SUCCESS;
-    int keyLength = strlen((const char*)key);
-    
-    const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
-    
-    if (keyLength == 0) {
-        //OutputDebugStringA("错误：提供的密钥为空");
-        return ERR_ENCRYPTION_FAILED;
-    }
+// 优化的流式文件加密函数（支持双密钥系统和复杂位旋转）
+int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
+	FILE* inputFile = NULL;
+	FILE* outputFile = NULL;
+	unsigned char* buffer = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	int combinedKeyLength = 0;
 
-    // 打开输入文件
-    fopen_s(&inputFile, filePath, "rb");
-    if (!inputFile) {
-        //OutputDebugStringA("输入文件打开失败");
-        return ERR_FILE_OPEN_FAILED;
-    }
+	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
 
-    // 获取文件大小用于进度计算
-    fseek(inputFile, 0, SEEK_END);
-    long totalFileSize = ftell(inputFile);
-    fseek(inputFile, 0, SEEK_SET);
+	// 检查私钥是否已设置
+	if (!IsPrivateKeySet()) {
+		return ERR_PRIVATE_KEY_NOT_SET;
+	}
 
-    // 打开输出文件
-    fopen_s(&outputFile, outputPath, "wb");
-    if (!outputFile) {
-        //OutputDebugStringA("输出文件创建失败");
-        fclose(inputFile);
-        return ERR_FILE_OPEN_FAILED;
-    }
+	if (!publicKey) {
+		return ERR_INVALID_PARAMETER;
+	}
 
-    // 分配大缓冲区用于高性能处理
-    buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
-    if (!buffer) {
-        //OutputDebugStringA("内存分配失败");
-        fclose(inputFile);
-        fclose(outputFile);
-        return ERR_MEMORY_ALLOCATION_FAILED;
-    }
+	// 进入临界区获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
 
-    // 写入魔数头用于标识加密文件
-    fwrite(MAGIC_HEADER, 1, MAGIC_HEADER_SIZE, outputFile);
-    fwrite(&keyLength, sizeof(int), 1, outputFile);
+	if (!combinedKey || combinedKeyLength == 0) {
+		return ERR_ENCRYPTION_FAILED;
+	}
 
-    // 初始进度回调通知
-    if (progressCallback) {
-        progressCallback(filePath, 0.0);
-    }
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
 
-    // 大块处理文件以实现复杂加密的最高速度
-    size_t bytesRead;
-    long totalProcessed = 0;
-    
-    while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
-        // 增强型XOR加密（带复杂位旋转增强安全性）
-        for (size_t i = 0; i < bytesRead; i++) {
-            // 对密钥应用XOR和位旋转
-            unsigned char keyByte = key[i % keyLength];
-            // 复杂位旋转增强安全性
-            keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
-            buffer[i] ^= keyByte;
-        }
-        
-        // 立即写入加密数据
-        size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
-        if (bytesWritten != bytesRead) {
-            //OutputDebugStringA("加密数据写入失败");
-            result = ERR_ENCRYPTION_FAILED;
-            break;
-        }
-        
-        totalProcessed += bytesRead;
-        
-        // 进度回调 - 报告基于数据处理的真实进度
-        if (progressCallback && totalFileSize > 0) {
-            // 计算数据处理进度（0-98%），为写校验和预留2%
-            double dataProgress = (double)totalProcessed / (double)totalFileSize;
-            double adjustedProgress = dataProgress * 0.98; // 数据处理占98%
-            progressCallback(filePath, adjustedProgress);
-        }
-    }
+	// 获取文件大小用于进度计算
+	fseek(inputFile, 0, SEEK_END);
+	long totalFileSize = ftell(inputFile);
+	fseek(inputFile, 0, SEEK_SET);
 
-    // 写入校验和
-    if (result == SUCCESS) {
-        // 进度回调 - 写校验和阶段（98%-100%）
-        if (progressCallback) {
-            progressCallback(filePath, 0.99); // 99% - 开始写校验和
-        }
-        
-        unsigned int checksum = CalculateChecksum(key, keyLength);
-        fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
-        
-        // 最终进度回调 - 100%完成
-        if (progressCallback) {
-            progressCallback(filePath, 1.0);
-        }
-        
-        //OutputDebugStringA("流式加密成功完成");
-    }
+	// 打开输出文件
+	fopen_s(&outputFile, outputPath, "wb");
+	if (!outputFile) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
 
-    // 清理资源
-    free(buffer);
-    fclose(inputFile);
-    fclose(outputFile);
-    
-    return result;
+	// 分配大缓冲区用于高性能处理
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
+	if (!buffer) {
+		fclose(inputFile);
+		fclose(outputFile);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 写入魔数头用于标识加密文件
+	fwrite(MAGIC_HEADER, 1, MAGIC_HEADER_SIZE, outputFile);
+	fwrite(&combinedKeyLength, sizeof(int), 1, outputFile);
+
+	// 初始进度回调通知
+	if (progressCallback) {
+		progressCallback(filePath, 0.0);
+	}
+
+	// 大块处理文件以实现复杂加密的最高速度
+	size_t bytesRead;
+	long totalProcessed = 0;
+
+	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 增强型XOR加密（带复杂位旋转增强安全性）
+		for (size_t i = 0; i < bytesRead; i++) {
+			// 对组合密钥应用XOR和位旋转
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 复杂位旋转增强安全性
+			keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
+			buffer[i] ^= keyByte;
+		}
+
+		// 立即写入加密数据
+		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		if (bytesWritten != bytesRead) {
+			result = ERR_ENCRYPTION_FAILED;
+			break;
+		}
+
+		totalProcessed += bytesRead;
+
+		// 进度回调 - 报告基于数据处理的真实进度
+		if (progressCallback && totalFileSize > 0) {
+			// 计算数据处理进度（0-98%），为写校验和预留2%
+			double dataProgress = (double)totalProcessed / (double)totalFileSize;
+			double adjustedProgress = dataProgress * 0.98; // 数据处理占98%
+			progressCallback(filePath, adjustedProgress);
+		}
+	}
+
+	// 写入校验和
+	if (result == SUCCESS) {
+		// 进度回调 - 写校验和阶段（98%-100%）
+		if (progressCallback) {
+			progressCallback(filePath, 0.99); // 99% - 开始写校验和
+		}
+
+		unsigned int checksum = CalculateChecksum(combinedKey, combinedKeyLength);
+		fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
+
+		// 最终进度回调 - 100%完成
+		if (progressCallback) {
+			progressCallback(filePath, 1.0);
+		}
+	}
+
+	// 清理资源
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+	free(buffer);
+	fclose(inputFile);
+	fclose(outputFile);
+
+	return result;
 }
 
-// 优化的流式文件解密函数（支持复杂位旋转和大缓冲区高性能处理）
-int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* key, ProgressCallback progressCallback) {
-    FILE* inputFile = NULL;
-    FILE* outputFile = NULL;
-    unsigned char* buffer = NULL;
-    int result = SUCCESS;
-    char header[MAGIC_HEADER_SIZE + 1];
-    int storedKeyLength = 0;
-    int keyLength = strlen((const char*)key);
-    
-    const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
+// 优化的流式文件解密函数（支持双密钥系统和复杂位旋转）
+int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
+	FILE* inputFile = NULL;
+	FILE* outputFile = NULL;
+	unsigned char* buffer = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	char header[MAGIC_HEADER_SIZE + 1];
+	int storedKeyLength = 0;
+	int combinedKeyLength = 0;
 
-    if (keyLength == 0) {
-        //OutputDebugStringA("错误：提供的密钥为空");
-        return ERR_DECRYPTION_FAILED;
-    }
+	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
 
-    // 打开输入文件
-    fopen_s(&inputFile, filePath, "rb");
-    if (!inputFile) {
-        //OutputDebugString(L"输入文件打开失败");
-        return ERR_FILE_OPEN_FAILED;
-    }
+	// 检查私钥是否已设置
+	if (!IsPrivateKeySet()) {
+		return ERR_PRIVATE_KEY_NOT_SET;
+	}
 
-    // 读取并验证文件头（早期格式检测）
-    if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
-        //OutputDebugString(L"文件头读取失败 - 文件太小或已损坏");
-        fclose(inputFile);
-        return ERR_INVALID_HEADER;
-    }
+	if (!publicKey) {
+		return ERR_INVALID_PARAMETER;
+	}
 
-    header[MAGIC_HEADER_SIZE] = '\0';
-    if (strcmp(header, MAGIC_HEADER) != 0) {
-        //OutputDebugString(L"无效文件格式 - 不是加密文件或版本错误");
-        fclose(inputFile);
-        return ERR_INVALID_HEADER;
-    }
+	// 进入临界区获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
 
-    // 读取存储的密钥长度
-    if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
-        //OutputDebugString(L"密钥长度读取失败");
-        fclose(inputFile);
-        return ERR_INVALID_HEADER;
-    }
+	if (!combinedKey || combinedKeyLength == 0) {
+		return ERR_DECRYPTION_FAILED;
+	}
 
-    // 验证密钥长度（早期验证）
-    if (storedKeyLength != keyLength) {
-        //OutputDebugStringA("密钥长度不匹配 - 提供了错误的密钥");
-        fclose(inputFile);
-        return ERR_DECRYPTION_FAILED;
-    }
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
 
-    // *** 新增：立即验证校验和，避免大文件错误解密 ***
-    // 保存当前文件位置
-    long currentPos = ftell(inputFile);
-    
-    // 跳到文件末尾读取校验和
-    fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
-    unsigned int storedChecksum;
-    if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
-        unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
-        if (storedChecksum != calculatedChecksum) {
-            //OutputDebugStringA("校验和验证失败 - 密钥错误或文件已损坏，停止解密");
-            fclose(inputFile);
-            return ERR_DECRYPTION_FAILED;
-        } else {
-            //OutputDebugStringA("校验和验证成功 - 密钥正确，开始解密");
-        }
-    } else {
-        //OutputDebugStringA("无法读取校验和");
-        fclose(inputFile);
-        return ERR_INVALID_HEADER;
-    }
-    
-    // 恢复文件位置到数据开始处
-    fseek(inputFile, currentPos, SEEK_SET);
+	// 读取并验证文件头（早期格式检测）
+	if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_INVALID_HEADER;
+	}
 
-    // 打开输出文件
-    fopen_s(&outputFile, outputPath, "wb");
-    if (!outputFile) {
-        //OutputDebugStringA("输出文件创建失败");
-        fclose(inputFile);
-        return ERR_FILE_OPEN_FAILED;
-    }
+	header[MAGIC_HEADER_SIZE] = '\0';
+	if (strcmp(header, MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_INVALID_HEADER;
+	}
 
-    // 分配大缓冲区
-    buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
-    if (!buffer) {
-        //OutputDebugStringA("内存分配失败");
-        fclose(inputFile);
-        fclose(outputFile);
-        return ERR_MEMORY_ALLOCATION_FAILED;
-    }
+	// 读取存储的密钥长度
+	if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_INVALID_HEADER;
+	}
 
-    // 获取文件大小并计算数据区大小
-    fseek(inputFile, 0, SEEK_END);
-    long fileSize = ftell(inputFile);
-    fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int), SEEK_SET);
-    long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int);
+	// 验证密钥长度（早期验证）
+	if (storedKeyLength != combinedKeyLength) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_DECRYPTION_FAILED;
+	}
 
-    // 初始进度回调通知
-    if (progressCallback) {
-        progressCallback(filePath, 0.0);
-    }
+	// *** 新增：立即验证校验和，避免大文件错误解密 ***
+	// 保存当前文件位置
+	long currentPos = ftell(inputFile);
 
-    // 大块处理文件以实现复杂解密的最高速度
-    size_t bytesRead;
-    long totalProcessed = 0;
-    
-    while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
-        // 处理包含校验和的最后数据块
-        if (totalProcessed + bytesRead >= dataSize) {
-            bytesRead = dataSize - totalProcessed;
-            if (bytesRead <= 0) break;
-        }
-        
-        // 增强型XOR解密（带复杂位旋转，与加密算法相同）
-        for (size_t i = 0; i < bytesRead; i++) {
-            // 应用XOR和密钥旋转（与加密算法相同）
-            unsigned char keyByte = key[i % keyLength];
-            // 复杂位旋转增强安全性
-            keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
-            buffer[i] ^= keyByte;
-        }
-        
-        // 立即写入解密数据
-        size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
-        if (bytesWritten != bytesRead) {
-            //OutputDebugStringA("解密数据写入失败");
-            result = ERR_DECRYPTION_FAILED;
-            break;
-        }
-        
-        totalProcessed += bytesRead;
-        
-        // 进度回调 - 报告基于数据处理的真实进度
-        if (progressCallback && dataSize > 0) {
-            // 现在数据处理占100%，因为校验和已在开头验证
-            double dataProgress = (double)totalProcessed / (double)dataSize;
-            progressCallback(filePath, dataProgress);
-        }
-    }
+	// 跳到文件末尾读取校验和
+	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	unsigned int storedChecksum;
+	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+		unsigned int calculatedChecksum = CalculateChecksum(combinedKey, combinedKeyLength);
+		if (storedChecksum != calculatedChecksum) {
+			fclose(inputFile);
+			free(combinedKey);
+			return ERR_DECRYPTION_FAILED;
+		}
+	}
+	else {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_INVALID_HEADER;
+	}
 
-    // 解密完成后的最终处理
-    if (result == SUCCESS) {
-        // 最终进度回调 - 100%完成
-        if (progressCallback) {
-            progressCallback(filePath, 1.0);
-        }
-        
-        //OutputDebugStringA("流式解密成功完成");
-    }
+	// 恢复文件位置到数据开始处
+	fseek(inputFile, currentPos, SEEK_SET);
 
-    // 清理资源
-    free(buffer);
-    fclose(inputFile);
-    fclose(outputFile);
-    
-    if (result != SUCCESS) {
-        remove(outputPath);  // 如果解密失败则删除输出文件
-    }
-    
-    return result;
+	// 打开输出文件
+	fopen_s(&outputFile, outputPath, "wb");
+	if (!outputFile) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 分配大缓冲区
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
+	if (!buffer) {
+		fclose(inputFile);
+		fclose(outputFile);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 获取文件大小并计算数据区大小
+	fseek(inputFile, 0, SEEK_END);
+	long fileSize = ftell(inputFile);
+	fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int), SEEK_SET);
+	long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int);
+
+	// 初始进度回调通知
+	if (progressCallback) {
+		progressCallback(filePath, 0.0);
+	}
+
+	// 大块处理文件以实现复杂解密的最高速度
+	size_t bytesRead;
+	long totalProcessed = 0;
+
+	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 处理包含校验和的最后数据块
+		if (totalProcessed + bytesRead >= dataSize) {
+			bytesRead = dataSize - totalProcessed;
+			if (bytesRead <= 0) break;
+		}
+
+		// 增强型XOR解密（带复杂位旋转，与加密算法相同）
+		for (size_t i = 0; i < bytesRead; i++) {
+			// 应用XOR和密钥旋转（与加密算法相同）
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 复杂位旋转增强安全性
+			keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
+			buffer[i] ^= keyByte;
+		}
+
+		// 立即写入解密数据
+		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		if (bytesWritten != bytesRead) {
+			result = ERR_DECRYPTION_FAILED;
+			break;
+		}
+
+		totalProcessed += bytesRead;
+
+		// 进度回调 - 报告基于数据处理的真实进度
+		if (progressCallback && dataSize > 0) {
+			// 现在数据处理占100%，因为校验和已在开头验证
+			double dataProgress = (double)totalProcessed / (double)dataSize;
+			progressCallback(filePath, dataProgress);
+		}
+	}
+
+	// 解密完成后的最终处理
+	if (result == SUCCESS) {
+		// 最终进度回调 - 100%完成
+		if (progressCallback) {
+			progressCallback(filePath, 1.0);
+		}
+	}
+
+	// 清理资源
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+	free(buffer);
+	fclose(inputFile);
+	fclose(outputFile);
+
+	if (result != SUCCESS) {
+		remove(outputPath);  // 如果解密失败则删除输出文件
+	}
+
+	return result;
 }
 
-int ValidateEncryptedFile(const char* filePath, const unsigned char* key) {
-    FILE* inputFile = NULL;
-    unsigned char* buffer = NULL;
-    char header[MAGIC_HEADER_SIZE + 1];
-    int storedKeyLength = 0;
-    int keyLength = strlen((const char*)key);
-    bool isValid = false;
+int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey) {
+	FILE* inputFile = NULL;
+	unsigned char* combinedKey = NULL;
+	char header[MAGIC_HEADER_SIZE + 1];
+	int storedKeyLength = 0;
+	int combinedKeyLength = 0;
+	bool isValid = false;
 
-    if (keyLength == 0) {
-        //OutputDebugStringA("Error: Empty key provided");
-        return 0; // Invalid
-    }
+	// 检查私钥是否已设置
+	if (!IsPrivateKeySet()) {
+		return 0; // Invalid
+	}
 
-    // Open input file
-    fopen_s(&inputFile, filePath, "rb");
-    if (!inputFile) {
-        //OutputDebugStringA("Failed to open input file for validation");
-        return 0; // Invalid
-    }
+	if (!publicKey) {
+		return 0; // Invalid
+	}
 
-    // Read and validate header (early format detection)
-    if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
-        //OutputDebugStringA("Validation failed: Cannot read header");
-        fclose(inputFile);
-        return 0; // Invalid
-    }
+	// 进入临界区获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
 
-    header[MAGIC_HEADER_SIZE] = '\0';
-    if (strcmp(header, MAGIC_HEADER) != 0) {
-        //OutputDebugStringA("Validation failed: Invalid file format");
-        fclose(inputFile);
-        return 0; // Invalid
-    }
+	if (!combinedKey || combinedKeyLength == 0) {
+		return 0; // Invalid
+	}
 
-    // Read stored key length
-    if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
-        //OutputDebugStringA("Validation failed: Cannot read key length");
-        fclose(inputFile);
-        return 0; // Invalid
-    }
+	// Open input file
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		free(combinedKey);
+		return 0; // Invalid
+	}
 
-    // Validate key length (early validation)
-    if (storedKeyLength != keyLength) {
-        //OutputDebugStringA("Validation failed: Key length mismatch");
-        fclose(inputFile);
-        return 0; // Invalid
-    }
+	// Read and validate header (early format detection)
+	if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
+		fclose(inputFile);
+		free(combinedKey);
+		return 0; // Invalid
+	}
 
-    // Validate checksum at the end of file
-    fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
-    unsigned int storedChecksum;
-    if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
-        unsigned int calculatedChecksum = CalculateChecksum(key, keyLength);
-        if (storedChecksum == calculatedChecksum) {
-            isValid = true;
-            //OutputDebugStringA("File validation successful");
-        } else {
-            //OutputDebugStringA("Validation failed: Checksum mismatch");
-        }
-    } else {
-        //OutputDebugStringA("Validation failed: Cannot read checksum");
-    }
+	header[MAGIC_HEADER_SIZE] = '\0';
+	if (strcmp(header, MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		free(combinedKey);
+		return 0; // Invalid
+	}
 
-    // Clean up
-    fclose(inputFile);
-    
-    return isValid ? 1 : 0;
+	// Read stored key length
+	if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		free(combinedKey);
+		return 0; // Invalid
+	}
+
+	// Validate key length (early validation)
+	if (storedKeyLength != combinedKeyLength) {
+		fclose(inputFile);
+		free(combinedKey);
+		return 0; // Invalid
+	}
+
+	// Validate checksum at the end of file
+	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	unsigned int storedChecksum;
+	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+		unsigned int calculatedChecksum = CalculateChecksum(combinedKey, combinedKeyLength);
+		if (storedChecksum == calculatedChecksum) {
+			isValid = true;
+		}
+	}
+
+	// Clean up
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+	fclose(inputFile);
+
+	return isValid ? 1 : 0;
 }
