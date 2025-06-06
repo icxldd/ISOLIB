@@ -20,6 +20,16 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void HelloWord2Delegate(UInt32 hh);
 
+        // 双密钥系统函数委托
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int InitStreamFileDelegate([MarshalAs(UnmanagedType.LPStr)] string privateKey);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void ClearPrivateKeyDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int IsPrivateKeySetDelegate();
+
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int StreamEncryptFileDelegate(
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
@@ -51,7 +61,11 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate long GetLocalTimestampDelegate();
 
-      
+        // 双密钥系统函数实例
+        public InitStreamFileDelegate InitStreamFile { get; private set; }
+        public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
+        public IsPrivateKeySetDelegate IsPrivateKeySet { get; private set; }
+        
         public StreamEncryptFileDelegate StreamEncryptFile { get; private set; }
         public StreamDecryptFileDelegate StreamDecryptFile { get; private set; }
         public GetNTPTimestampDelegate GetNTPTimestamp { get; private set; }
@@ -112,6 +126,11 @@ namespace EncodeLib
         {
             try
             {
+                // 双密钥系统函数
+                InitStreamFile = dllInstance.GetDelegateFromFuncName<InitStreamFileDelegate>("InitStreamFile");
+                ClearPrivateKey = dllInstance.GetDelegateFromFuncName<ClearPrivateKeyDelegate>("ClearPrivateKey");
+                IsPrivateKeySet = dllInstance.GetDelegateFromFuncName<IsPrivateKeySetDelegate>("IsPrivateKeySet");
+                
                 // 获取所有导出函数的委托
                 StreamEncryptFile = dllInstance.GetDelegateFromFuncName<StreamEncryptFileDelegate>("StreamEncryptFile");
                 StreamDecryptFile = dllInstance.GetDelegateFromFuncName<StreamDecryptFileDelegate>("StreamDecryptFile");

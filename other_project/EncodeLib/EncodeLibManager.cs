@@ -189,21 +189,96 @@ namespace EncodeLib
         /// </summary>
         public bool IsLoaded => dllManager?.IsLoaded == true && !disposed;
 
+        // ========== 双密钥系统管理函数 ==========
+
         /// <summary>
-        /// 加密文件
+        /// 使用私钥初始化双密钥加密系统
         /// </summary>
-        /// <param name="inputFilePath">输入文件路径</param>
-        /// <param name="outputFilePath">输出文件路径</param>
-        /// <param name="key">加密密钥</param>
-        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <param name="privateKey">私钥字符串（支持任意长度）</param>
         /// <returns>成功返回0，失败返回错误码</returns>
-        public int EncryptFile(string inputFilePath, string outputFilePath, string key, ProgressCallback progressCallback = null)
+        public int InitializePrivateKey(string privateKey)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            try
+            {
+                return dllManager.InitStreamFile(privateKey);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib初始化私钥错误: {ex.Message}");
+                return -7; // ERR_INVALID_PARAMETER
+            }
+        }
+
+        /// <summary>
+        /// 清理私钥，释放内存（安全清除）
+        /// </summary>
+        public void ClearPrivateKey()
         {
             CheckDllLoaded();
 
             try
             {
-                return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, key, progressCallback);
+                dllManager.ClearPrivateKey();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib清理私钥错误: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 检查私钥是否已设置
+        /// </summary>
+        /// <returns>true表示已设置，false表示未设置</returns>
+        public bool IsPrivateKeySet()
+        {
+            CheckDllLoaded();
+
+            try
+            {
+                return dllManager.IsPrivateKeySet() == 1;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib检查私钥错误: {ex.Message}");
+                return false;
+            }
+        }
+
+        // ========== 双密钥加密解密函数 ==========
+
+        /// <summary>
+        /// 加密文件（双密钥系统：需要预先设置私钥，此处传入公钥）
+        /// </summary>
+        /// <param name="inputFilePath">输入文件路径</param>
+        /// <param name="outputFilePath">输出文件路径</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <returns>成功返回0，失败返回错误码</returns>
+        public int EncryptFile(string inputFilePath, string outputFilePath, string publicKey, ProgressCallback progressCallback = null)
+        {
+            CheckDllLoaded();
+
+            if (!IsPrivateKeySet())
+            {
+                throw new InvalidOperationException("私钥未设置！请先调用 InitializePrivateKey 方法。");
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            try
+            {
+                return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -213,20 +288,30 @@ namespace EncodeLib
         }
 
         /// <summary>
-        /// 解密文件
+        /// 解密文件（双密钥系统：需要预先设置私钥，此处传入公钥）
         /// </summary>
         /// <param name="inputFilePath">输入文件路径</param>
         /// <param name="outputFilePath">输出文件路径</param>
-        /// <param name="key">解密密钥</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
         /// <param name="progressCallback">进度回调函数（可选）</param>
         /// <returns>成功返回0，失败返回错误码</returns>
-        public int DecryptFile(string inputFilePath, string outputFilePath, string key, ProgressCallback progressCallback = null)
+        public int DecryptFile(string inputFilePath, string outputFilePath, string publicKey, ProgressCallback progressCallback = null)
         {
             CheckDllLoaded();
 
+            if (!IsPrivateKeySet())
+            {
+                throw new InvalidOperationException("私钥未设置！请先调用 InitializePrivateKey 方法。");
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
             try
             {
-                return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, key, progressCallback);
+                return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -234,8 +319,6 @@ namespace EncodeLib
                 return -1; // 返回通用错误码
             }
         }
-
-
 
         /// <summary>
         /// 获取NTP时间戳
@@ -285,6 +368,8 @@ namespace EncodeLib
                 case -4: return "解密操作失败";
                 case -5: return "无效文件头";
                 case -6: return "线程创建失败";
+                case -7: return "无效参数";
+                case -8: return "私钥未设置";
                 default: return $"未知错误 (代码: {errorCode})";
             }
         }

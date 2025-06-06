@@ -41,7 +41,7 @@ namespace TestWin
                 if (encodeLib.IsLoaded)
                 {
                     this.Text = this.Text.Replace("正在初始化EncodeLib...", "EncodeLib已成功初始化 [无硬盘痕迹]");
-                    
+                    EncodeLibManager.Instance.InitializePrivateKey("123");
                     #if DEBUG
                     System.Diagnostics.Debug.WriteLine("EncodeLib初始化成功！");
                     #endif
