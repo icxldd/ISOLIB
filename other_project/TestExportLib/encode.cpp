@@ -217,13 +217,14 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	long totalProcessed = 0;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
-		// 增强型XOR加密（带复杂位旋转增强安全性）
+		// 高效双层XOR + 半字节交换加密算法（替代位旋转）
 		for (size_t i = 0; i < bytesRead; i++) {
-			// 对组合密钥应用XOR和位旋转
 			unsigned char keyByte = combinedKey[i % combinedKeyLength];
-			// 复杂位旋转增强安全性
-			keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
-			buffer[i] ^= keyByte;
+			unsigned char a1 = buffer[i];                                    // 原始字节
+			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换
+			unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR
+			buffer[i] = a4;                                                  // 最终加密结果
 		}
 
 		// 立即写入加密数据
@@ -401,13 +402,14 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 			if (bytesRead <= 0) break;
 		}
 
-		// 增强型XOR解密（带复杂位旋转，与加密算法相同）
+		// 高效双层XOR + 半字节交换解密算法（与加密算法相同，自逆操作）
 		for (size_t i = 0; i < bytesRead; i++) {
-			// 应用XOR和密钥旋转（与加密算法相同）
 			unsigned char keyByte = combinedKey[i % combinedKeyLength];
-			// 复杂位旋转增强安全性
-			keyByte = (keyByte << (i % 8)) | (keyByte >> (8 - (i % 8)));
-			buffer[i] ^= keyByte;
+			unsigned char a1 = buffer[i];                                    // 加密字节
+			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR（逆向第二次XOR）
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换（自逆操作）
+			unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR（逆向第一次XOR）
+			buffer[i] = a4;                                                  // 最终解密结果
 		}
 
 		// 立即写入解密数据
