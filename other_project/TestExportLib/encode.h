@@ -45,5 +45,11 @@ extern "C" {
 	// filePath: 加密文件路径
 	// publicKey: 公钥（与预设私钥组合验证）
 	// 返回值: 1表示有效，0表示无效
-	PDUDLL_API int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey);
+	int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey);
+
+	// 新增：计算CRC32校验和（内部函数，用于更强的校验）
+	unsigned int CalculateCRC32(const unsigned char* data, size_t length);
+
+	// 新增：计算公钥哈希值（内部函数，用于公钥完整性验证）
+	unsigned int CalculatePublicKeyHash(const unsigned char* publicKey);
 }
