@@ -723,6 +723,134 @@ namespace TestWin
             var b= ConvertDllToBase64(textBox1.Text);
             MessageBox.Show("转换是否成功:"+b);
         }
+
+
+        //数据加密
+        private void button7_Click(object sender, EventArgs e)
+        {
+            if (!CheckEncodeLibLoaded()) return;
+
+            try
+            {
+                string inputData = textBox1.Text;
+                string publicKey = textBox2.Text;
+
+                // 验证输入
+                if (string.IsNullOrEmpty(inputData))
+                {
+                    MessageBox.Show("请在文本框中输入要加密的数据！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(publicKey))
+                {
+                    MessageBox.Show("请输入公钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 清空日志
+                richTextBox1.Clear();
+                richTextBox1.AppendText("=== 数据加密 ===\r\n");
+                richTextBox1.AppendText($"原始数据长度: {inputData.Length} 字符\r\n");
+                richTextBox1.AppendText($"公钥: {publicKey}\r\n");
+                richTextBox1.AppendText("开始加密...\r\n");
+
+                // 将字符串转换为字节数组
+                byte[] inputBytes = Encoding.UTF8.GetBytes(inputData);
+                richTextBox1.AppendText($"转换为字节数组: {inputBytes.Length} 字节\r\n");
+
+                // 调用加密方法
+                byte[] encryptedData = EncodeLibManager.Instance.EncryptData(inputBytes, publicKey);
+
+                // 将加密后的数据转换为Base64字符串便于显示和存储
+                string encryptedBase64 = Convert.ToBase64String(encryptedData);
+
+                richTextBox1.AppendText($"加密成功！\r\n");
+                richTextBox1.AppendText($"加密后数据长度: {encryptedData.Length} 字节\r\n");
+                richTextBox1.AppendText($"Base64编码长度: {encryptedBase64.Length} 字符\r\n");
+                richTextBox1.AppendText("\r\n=== 加密结果 (Base64编码) ===\r\n");
+                richTextBox1.AppendText(encryptedBase64);
+                richTextBox1.AppendText("\r\n\r\n提示: 可以复制上面的Base64字符串用于解密测试");
+
+                // 将加密结果也设置到textBox1中，方便直接进行解密测试
+                textBox1.Text = encryptedBase64;
+
+                MessageBox.Show($"数据加密成功！\n\n原始数据长度: {inputData.Length} 字符\n加密后长度: {encryptedData.Length} 字节\nBase64长度: {encryptedBase64.Length} 字符\n\n加密结果已显示在日志中并自动填入输入框",
+                    "加密成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"\r\n加密失败: {ex.Message}\r\n");
+                MessageBox.Show($"数据加密失败: {ex.Message}", "加密失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        //数据解密
+        private void button6_Click(object sender, EventArgs e)
+        {
+            if (!CheckEncodeLibLoaded()) return;
+
+            try
+            {
+                string encryptedBase64 = textBox1.Text;
+                string publicKey = textBox2.Text;
+
+                // 验证输入
+                if (string.IsNullOrEmpty(encryptedBase64))
+                {
+                    MessageBox.Show("请在文本框中输入要解密的数据（Base64格式）！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(publicKey))
+                {
+                    MessageBox.Show("请输入公钥！", "错误", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 清空日志
+                richTextBox1.Clear();
+                richTextBox1.AppendText("=== 数据解密 ===\r\n");
+                richTextBox1.AppendText($"输入数据长度: {encryptedBase64.Length} 字符\r\n");
+                richTextBox1.AppendText($"公钥: {publicKey}\r\n");
+                richTextBox1.AppendText("开始解密...\r\n");
+
+                // 验证并转换Base64数据
+                byte[] encryptedData;
+                try
+                {
+                    encryptedData = Convert.FromBase64String(encryptedBase64);
+                    richTextBox1.AppendText($"Base64解码成功: {encryptedData.Length} 字节\r\n");
+                }
+                catch (FormatException)
+                {
+                    throw new InvalidOperationException("输入的数据不是有效的Base64格式！请确保输入的是加密后的Base64字符串。");
+                }
+
+                // 调用解密方法
+                byte[] decryptedData = EncodeLibManager.Instance.DecryptData(encryptedData, publicKey);
+
+                // 将解密后的字节数组转换为字符串
+                string decryptedText = Encoding.UTF8.GetString(decryptedData);
+
+                richTextBox1.AppendText($"解密成功！\r\n");
+                richTextBox1.AppendText($"解密后数据长度: {decryptedData.Length} 字节\r\n");
+                richTextBox1.AppendText($"解密后文本长度: {decryptedText.Length} 字符\r\n");
+                richTextBox1.AppendText("\r\n=== 解密结果 ===\r\n");
+                richTextBox1.AppendText(decryptedText);
+
+                // 将解密结果设置到textBox1中
+                textBox1.Text = decryptedText;
+
+                MessageBox.Show($"数据解密成功！\n\n加密数据长度: {encryptedData.Length} 字节\n解密后长度: {decryptedData.Length} 字节\n解密后文本: {decryptedText.Length} 字符\n\n解密结果已显示在日志中并自动填入输入框",
+                    "解密成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"\r\n解密失败: {ex.Message}\r\n");
+                MessageBox.Show($"数据解密失败: {ex.Message}", "解密失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 
     public static class StructBaseExtensions

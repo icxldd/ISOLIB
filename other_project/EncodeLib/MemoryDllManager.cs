@@ -61,6 +61,29 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate long GetLocalTimestampDelegate();
 
+        // 新增：字节数组加解密函数委托
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int StreamEncryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int StreamDecryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void FreeEncryptedDataDelegate(IntPtr data);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void FreeDecryptedDataDelegate(IntPtr data);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -69,6 +92,12 @@ namespace EncodeLib
         public StreamEncryptFileDelegate StreamEncryptFile { get; private set; }
         public StreamDecryptFileDelegate StreamDecryptFile { get; private set; }
         public GetNTPTimestampDelegate GetNTPTimestamp { get; private set; }
+        
+        // 新增：字节数组加解密函数实例
+        public StreamEncryptDataDelegate StreamEncryptData { get; private set; }
+        public StreamDecryptDataDelegate StreamDecryptData { get; private set; }
+        public FreeEncryptedDataDelegate FreeEncryptedData { get; private set; }
+        public FreeDecryptedDataDelegate FreeDecryptedData { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL到内存
@@ -136,6 +165,11 @@ namespace EncodeLib
                 StreamDecryptFile = dllInstance.GetDelegateFromFuncName<StreamDecryptFileDelegate>("StreamDecryptFile");
                 GetNTPTimestamp = dllInstance.GetDelegateFromFuncName<GetNTPTimestampDelegate>("GetNTPTimestamp");
                
+                // 新增：字节数组加解密函数委托
+                StreamEncryptData = dllInstance.GetDelegateFromFuncName<StreamEncryptDataDelegate>("StreamEncryptData");
+                StreamDecryptData = dllInstance.GetDelegateFromFuncName<StreamDecryptDataDelegate>("StreamDecryptData");
+                FreeEncryptedData = dllInstance.GetDelegateFromFuncName<FreeEncryptedDataDelegate>("FreeEncryptedData");
+                FreeDecryptedData = dllInstance.GetDelegateFromFuncName<FreeDecryptedDataDelegate>("FreeDecryptedData");
             }
             catch (EntryPointNotFoundException ex)
             {

@@ -653,3 +653,227 @@ int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey) 
 
 	return isValid ? 1 : 0;
 }
+
+// 新增：字节数组加密函数（双密钥系统）
+int StreamEncryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength) {
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	int combinedKeyLength = 0;
+
+	// 检查输入参数
+	if (!inputData || inputLength == 0 || !publicKey || !outputData || !outputLength) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化输出参数
+	*outputData = NULL;
+	*outputLength = 0;
+
+	// 检查私钥是否已设置
+	if (!IsPrivateKeySet()) {
+		return ERR_PRIVATE_KEY_NOT_SET;
+	}
+
+	// 进入临界区获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
+
+	if (!combinedKey || combinedKeyLength == 0) {
+		return ERR_ENCRYPTION_FAILED;
+	}
+
+	// 计算输出数据大小：魔数头 + 密钥长度 + 公钥哈希 + 原始数据 + CRC32校验和
+	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int);
+	size_t outputSize = headerSize + inputLength + sizeof(unsigned int);
+
+	// 分配输出缓冲区
+	*outputData = (unsigned char*)malloc(outputSize);
+	if (!*outputData) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	unsigned char* outPtr = *outputData;
+
+	// 写入魔数头
+	memcpy(outPtr, MAGIC_HEADER, MAGIC_HEADER_SIZE);
+	outPtr += MAGIC_HEADER_SIZE;
+
+	// 写入组合密钥长度
+	memcpy(outPtr, &combinedKeyLength, sizeof(int));
+	outPtr += sizeof(int);
+
+	// 写入公钥哈希值
+	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
+	memcpy(outPtr, &publicKeyHash, sizeof(unsigned int));
+	outPtr += sizeof(unsigned int);
+
+	// 加密数据
+	for (size_t i = 0; i < inputLength; i++) {
+		unsigned char keyByte = combinedKey[i % combinedKeyLength];
+		unsigned char a1 = inputData[i];                                    // 原始字节
+		unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR
+		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换
+		unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR
+		outPtr[i] = a4;                                                     // 最终加密结果
+	}
+	outPtr += inputLength;
+
+	// 写入CRC32校验和
+	unsigned int checksum = CalculateCRC32(combinedKey, combinedKeyLength);
+	memcpy(outPtr, &checksum, sizeof(unsigned int));
+
+	*outputLength = outputSize;
+
+	// 清理资源
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+
+	return SUCCESS;
+}
+
+// 新增：字节数组解密函数（双密钥系统）
+int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength) {
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	char header[MAGIC_HEADER_SIZE + 1];
+	int storedKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	// 检查输入参数
+	if (!inputData || inputLength == 0 || !publicKey || !outputData || !outputLength) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化输出参数
+	*outputData = NULL;
+	*outputLength = 0;
+
+	// 检查数据最小长度
+	size_t minSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(unsigned int);
+	if (inputLength < minSize) {
+		return ERR_INVALID_HEADER;
+	}
+
+	// 检查私钥是否已设置
+	if (!IsPrivateKeySet()) {
+		return ERR_PRIVATE_KEY_NOT_SET;
+	}
+
+	// 进入临界区获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
+
+	if (!combinedKey || combinedKeyLength == 0) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	const unsigned char* inPtr = inputData;
+
+	// 验证魔数头
+	memcpy(header, inPtr, MAGIC_HEADER_SIZE);
+	header[MAGIC_HEADER_SIZE] = '\0';
+	if (strcmp(header, MAGIC_HEADER) != 0) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_INVALID_HEADER;
+	}
+	inPtr += MAGIC_HEADER_SIZE;
+
+	// 读取存储的密钥长度
+	memcpy(&storedKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	// 读取并验证公钥哈希值
+	unsigned int storedPublicKeyHash;
+	memcpy(&storedPublicKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证公钥完整性
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 验证密钥长度
+	if (storedKeyLength != combinedKeyLength) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 计算数据区大小
+	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int);
+	size_t dataSize = inputLength - headerSize - sizeof(unsigned int);
+
+	// 验证校验和（从末尾读取）
+	unsigned int storedChecksum;
+	memcpy(&storedChecksum, inputData + inputLength - sizeof(unsigned int), sizeof(unsigned int));
+	unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
+	if (storedChecksum != calculatedChecksum) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 分配输出缓冲区
+	*outputData = (unsigned char*)malloc(dataSize);
+	if (!*outputData) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 解密数据
+	for (size_t i = 0; i < dataSize; i++) {
+		unsigned char keyByte = combinedKey[i % combinedKeyLength];
+		unsigned char a1 = inPtr[i];                                        // 加密字节
+		unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR（逆向第二次XOR）
+		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换（自逆操作）
+		unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR（逆向第一次XOR）
+		(*outputData)[i] = a4;                                              // 最终解密结果
+	}
+
+	*outputLength = dataSize;
+
+	// 清理资源
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+
+	return SUCCESS;
+}
+
+// 新增：释放加密数据内存
+void FreeEncryptedData(unsigned char* data) {
+	if (data) {
+		free(data);
+	}
+}
+
+// 新增：释放解密数据内存
+void FreeDecryptedData(unsigned char* data) {
+	if (data) {
+		free(data);
+	}
+}

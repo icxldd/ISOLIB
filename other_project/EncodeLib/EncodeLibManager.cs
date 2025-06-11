@@ -90,48 +90,6 @@ namespace EncodeLib
             }
         }
 
-        /// <summary>
-        /// 从Base64字符串初始化内存DLL（完全无文件痕迹）
-        /// </summary>
-        /// <param name="base64DllData">DLL的Base64字符串数据</param>
-        private void InitializeMemoryDll(string base64DllData)
-        {
-            try
-            {
-                // 从Base64转换为字节数组
-                byte[] dllBytes = ConvertBase64ToBytes(base64DllData);
-
-                if (dllBytes == null || dllBytes.Length == 0)
-                {
-                    throw new InvalidOperationException("Base64转换后的字节数组为空");
-                }
-
-                System.Diagnostics.Debug.WriteLine($"EncodeLib: 从Base64加载DLL，大小: {dllBytes.Length:N0} 字节");
-
-                // 从字节数组创建内存DLL管理器（真正的内存加载）
-                dllManager = new MemoryDllManager(dllBytes);
-
-                // 验证DLL是否成功加载
-                if (!dllManager.IsLoaded)
-                {
-                    throw new InvalidOperationException("DLL从内存加载失败");
-                }
-
-                // 立即清除内存中的DLL字节数组痕迹
-                ClearMemoryTraces(dllBytes);
-
-                System.Diagnostics.Debug.WriteLine("EncodeLib: DLL从Base64无痕加载成功！");
-            }
-            catch (Exception ex)
-            {
-                string errorMsg = $"从Base64初始化内存DLL失败: {ex.Message}";
-                System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
-            }
-        }
-
-
-
-
 
         /// <summary>
         /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
@@ -317,6 +275,204 @@ namespace EncodeLib
             {
                 System.Diagnostics.Debug.WriteLine($"EncodeLib解密错误: {ex.Message}");
                 return -1; // 返回通用错误码
+            }
+        }
+
+        // ========== 字节数组加密解密函数 ==========
+
+        /// <summary>
+        /// 加密字节数组（双密钥系统：需要预先设置私钥，此处传入公钥）
+        /// </summary>
+        /// <param name="inputData">输入数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <returns>成功返回加密后的字节数组，失败抛出异常</returns>
+        public byte[] EncryptData(byte[] inputData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (!IsPrivateKeySet())
+            {
+                throw new InvalidOperationException("私钥未设置！请先调用 InitializePrivateKey 方法。");
+            }
+
+            if (inputData == null || inputData.Length == 0)
+            {
+                throw new ArgumentException("输入数据不能为空", nameof(inputData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+            IntPtr outputPtr = IntPtr.Zero;
+            byte[] result = null;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(inputData.Length);
+                Marshal.Copy(inputData, 0, inputPtr, inputData.Length);
+
+                // 调用DLL函数
+                UIntPtr outputLength;
+                int errorCode = dllManager.StreamEncryptData(
+                    inputPtr,
+                    new UIntPtr((uint)inputData.Length),
+                    publicKey,
+                    out outputPtr,
+                    out outputLength);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"加密失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (outputPtr == IntPtr.Zero || outputLength.ToUInt32() == 0)
+                {
+                    throw new InvalidOperationException("加密返回空数据");
+                }
+
+                // 立即复制到C#字节数组
+                int length = (int)outputLength.ToUInt32();
+                result = new byte[length];
+                Marshal.Copy(outputPtr, result, 0, length);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib字节数组加密错误: {ex.Message}");
+                throw new InvalidOperationException($"字节数组加密失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 立即释放所有分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+
+                if (outputPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeEncryptedData(outputPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放加密数据内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 解密字节数组（双密钥系统：需要预先设置私钥，此处传入公钥）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <returns>成功返回解密后的字节数组，失败抛出异常</returns>
+        public byte[] DecryptData(byte[] encryptedData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (!IsPrivateKeySet())
+            {
+                throw new InvalidOperationException("私钥未设置！请先调用 InitializePrivateKey 方法。");
+            }
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+            IntPtr outputPtr = IntPtr.Zero;
+            byte[] result = null;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(encryptedData.Length);
+                Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
+
+                // 调用DLL函数
+                UIntPtr outputLength;
+                int errorCode = dllManager.StreamDecryptData(
+                    inputPtr,
+                    new UIntPtr((uint)encryptedData.Length),
+                    publicKey,
+                    out outputPtr,
+                    out outputLength);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"解密失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (outputPtr == IntPtr.Zero || outputLength.ToUInt32() == 0)
+                {
+                    throw new InvalidOperationException("解密返回空数据");
+                }
+
+                // 立即复制到C#字节数组
+                int length = (int)outputLength.ToUInt32();
+                result = new byte[length];
+                Marshal.Copy(outputPtr, result, 0, length);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib字节数组解密错误: {ex.Message}");
+                throw new InvalidOperationException($"字节数组解密失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 立即释放所有分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+
+                if (outputPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeDecryptedData(outputPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放解密数据内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 验证加密数据（双密钥系统：需要预先设置私钥，此处传入公钥）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <returns>有效返回true，无效返回false</returns>
+        public bool ValidateData(byte[] encryptedData, string publicKey)
+        {
+            try
+            {
+                // 尝试解密来验证数据有效性
+                byte[] decryptedData = DecryptData(encryptedData, publicKey);
+                return decryptedData != null && decryptedData.Length > 0;
+            }
+            catch
+            {
+                return false;
             }
         }
 
