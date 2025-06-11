@@ -1,5 +1,6 @@
 ﻿D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(520,5): warning MSB8004: Output 目录未以斜杠结尾。  此生成实例将添加斜杠，因为必须有这个斜杠才能正确计算 Output 目录。
 D:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\Microsoft.CppBuild.targets(534,5): warning MSB8028: 中间目录(Debug\)包含从另一个项目(TestExportLib.vcxproj)共享的文件。   这会导致错误的清除和重新生成行为。
+  pch.cpp
   dllmain.cpp
   encode.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
@@ -44,11 +45,6 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(363,5): warning C4273
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(503,34): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(559,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
-  (编译源文件“/encode.cpp”)
-      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(48,17):
-      参见“ValidateEncryptedFile”的前一个定义
-  
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(658,5): warning C4273: “StreamEncryptData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(58,17):
@@ -69,8 +65,24 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(875,6): warning C4273
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(76,18):
       参见“FreeDecryptedData”的前一个定义
   
+  ntp.cpp
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.h(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+  (编译源文件“/ntp.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(170,38): warning C4996: 'inet_addr': Use inet_pton() or InetPton() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+  (编译源文件“/ntp.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(173,36): warning C4996: 'gethostbyname': Use getaddrinfo() or GetAddrInfoW() instead or define _WINSOCK_DEPRECATED_NO_WARNINGS to disable deprecated API warnings
+  (编译源文件“/ntp.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(277,13): warning C4273: “GetNTPTimestamp”: dll 链接不一致
+  (编译源文件“/ntp.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\ntp.h(30,28):
+      参见“GetNTPTimestamp”的前一个定义
+  
+  Pduapi.cpp
   正在生成代码...
-  LINK : 没有找到 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.dll 或上一个增量链接没有生成它；正在执行完全链接
     正在创建库 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.lib 和对象 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.exp
   TestExportLib.vcxproj -> D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.dll
   'pwsh.exe' 不是内部或外部命令，也不是可运行的程序

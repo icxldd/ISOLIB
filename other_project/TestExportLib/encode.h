@@ -45,7 +45,7 @@ extern "C" {
 	// filePath: 加密文件路径
 	// publicKey: 公钥（与预设私钥组合验证）
 	// 返回值: 1表示有效，0表示无效
-	PDUDLL_API int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey);
+	int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey);
 
 	// 新增：字节数组加密函数（双密钥系统：需要预先设置私钥，此处传入公钥）
 	// inputData: 输入数据指针
