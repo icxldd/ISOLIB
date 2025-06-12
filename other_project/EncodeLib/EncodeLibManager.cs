@@ -5,12 +5,12 @@ using System.Runtime.InteropServices;
 namespace EncodeLib
 {
     /// <summary>
-    /// EncodeLib主管理器类 - 对外提供加密解密和内存DLL加载服务
+    /// EncodeLib主管理器类 - 对外提供加密解密和DLL加载服务
     /// 封装所有TestExportLib功能，提供简单易用的API
     /// </summary>
     public class EncodeLibManager : IDisposable
     {
-        private MemoryDllManager dllManager;
+        private WindowsDllManager dllManager;
         private bool disposed = false;
         private static EncodeLibManager instance;
         private static readonly object lockObject = new object();
@@ -41,8 +41,7 @@ namespace EncodeLib
         /// </summary>
         private EncodeLibManager()
         {
-            //InitializeMemoryDll(GobalData.DllData);
-            InitializeMemoryDll();
+            InitializeWindowsDll();
         }
 
         /// <summary>
@@ -68,7 +67,6 @@ namespace EncodeLib
             }
         }
 
-
         /// <summary>
         /// 清除内存痕迹
         /// </summary>
@@ -90,56 +88,79 @@ namespace EncodeLib
             }
         }
 
-
         /// <summary>
-        /// 初始化内存DLL管理器，从嵌入资源加载DLL到内存（完全无硬盘痕迹）
+        /// 初始化Windows DLL管理器，使用Windows API加载DLL
         /// </summary>
-        private void InitializeMemoryDll()
+        private void InitializeWindowsDll()
         {
             try
             {
-                const string dllName = "ExportLib.vmp.dll";
-
-                // 优先从嵌入资源加载DLL字节数组
-                byte[] dllBytes = null;
-
-                try
+                // 寻找DLL文件路径
+                string dllPath = FindDllPath();
+                
+                if (string.IsNullOrEmpty(dllPath))
                 {
-                    // 从嵌入资源加载（完全无硬盘痕迹）
-                    if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
-                    {
-                        dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
-                        System.Diagnostics.Debug.WriteLine("EncodeLib: DLL已从嵌入资源加载 [无硬盘痕迹]");
-                    }
-                }
-                catch (Exception embedEx)
-                {
-                    // 嵌入资源加载失败，抛出异常
-                    throw new InvalidOperationException($"嵌入资源DLL加载失败: {embedEx.Message}", embedEx);
+                    throw new FileNotFoundException("找不到TestExportLib.dll文件");
                 }
 
-                if (dllBytes == null || dllBytes.Length == 0)
-                {
-                    throw new InvalidOperationException("获取到的DLL字节数组为空");
-                }
-
-                // 从字节数组创建内存DLL管理器（真正的内存加载）
-                dllManager = new MemoryDllManager(dllBytes);
+                // 使用Windows API加载DLL
+                dllManager = new WindowsDllManager(dllPath);
 
                 // 验证DLL是否成功加载
                 if (!dllManager.IsLoaded)
                 {
-                    throw new InvalidOperationException("DLL从内存加载失败");
+                    throw new InvalidOperationException("DLL加载失败");
                 }
 
-                System.Diagnostics.Debug.WriteLine($"EncodeLib: DLL加载成功！大小: {dllBytes.Length:N0} 字节");
+                System.Diagnostics.Debug.WriteLine($"EncodeLib: DLL加载成功！路径: {dllPath}");
             }
             catch (Exception ex)
             {
-                string errorMsg = $"初始化内存DLL失败: {ex.Message}";
+                string errorMsg = $"初始化Windows DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
-                //throw new InvalidOperationException(errorMsg, ex);
+                throw new InvalidOperationException(errorMsg, ex);
             }
+        }
+
+        /// <summary>
+        /// 查找DLL文件路径
+        /// </summary>
+        /// <returns>DLL文件的完整路径</returns>
+        private string FindDllPath()
+        {
+            // 可能的DLL文件名
+            string[] dllNames = {
+                "TestExportLib.dll",
+                "ExportLib.dll",
+                "TestExportLib.vmp.dll",
+                "ExportLib.vmp.dll"
+            };
+
+            // 可能的搜索路径
+            string[] searchPaths = {
+                Environment.CurrentDirectory,                    // 当前目录
+                AppDomain.CurrentDomain.BaseDirectory,         // 应用程序基目录
+                Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), // 当前程序集目录
+                Path.Combine(Environment.CurrentDirectory, "lib"),      // lib子目录
+                Path.Combine(Environment.CurrentDirectory, "bin"),      // bin子目录
+                Path.Combine(Environment.CurrentDirectory, "dll"),      // dll子目录
+            };
+
+            // 遍历所有可能的组合
+            foreach (string searchPath in searchPaths)
+            {
+                foreach (string dllName in dllNames)
+                {
+                    string fullPath = Path.Combine(searchPath, dllName);
+                    if (File.Exists(fullPath))
+                    {
+                        System.Diagnostics.Debug.WriteLine($"找到DLL文件: {fullPath}");
+                        return fullPath;
+                    }
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -559,5 +580,4 @@ namespace EncodeLib
             Dispose();
         }
     }
-    
 }

@@ -48,9 +48,12 @@
     <Compile Include="DLLFromMemory.cs" />
     <Compile Include="MemoryDllManager.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="WindowsDllManager.cs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="ExportLib.vmp.dll" />
+    <Content Include="ExportLib.vmp.dll">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>
