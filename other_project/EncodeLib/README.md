@@ -41,17 +41,67 @@ EncodeLib是一个基于RSA-2048算法的非对称加密系统，提供了C++库
 - **密钥格式**: `RSA-2048-PUB:n:e` (公钥) 和 `RSA-2048-PRI:n:d` (私钥)
 - **加密算法**: 基于RSA参数的三层XOR流加密
 - **文件头**: `ASYMV1.0` 魔数标识
+- **密钥验证**: 解密时自动验证私钥与加密公钥是否匹配
 
 ### 📁 文件和数据加密
 - **文件加密**: 支持任意大小文件的流式加密
 - **数据加密**: 支持字节数组的内存加密
 - **进度回调**: 实时显示加密/解密进度
 - **完整性验证**: CRC32校验和确保数据完整性
+- **密钥匹配验证**: 防止使用错误私钥解密
 
 ### 🔑 密钥管理
 - **自动生成**: 一次性生成多个密钥对
 - **内存安全**: 自动释放密钥内存，防止泄露
 - **格式验证**: 自动验证密钥格式和有效性
+- **配对验证**: 确保私钥与加密时使用的公钥匹配
+
+## 密钥验证机制
+
+### 🔒 自动密钥匹配验证
+
+系统在解密时会自动验证私钥是否与加密时使用的公钥匹配：
+
+1. **加密时存储**：
+   - 公钥哈希值存储在加密文件头部
+   - 公钥CRC32校验和存储在文件尾部
+
+2. **解密时验证**：
+   - 从私钥重构对应的公钥
+   - 比较重构公钥的哈希值和校验和
+   - 如果不匹配，返回 `ERR_INVALID_KEY` 错误
+
+3. **验证示例**：
+```csharp
+// 生成两个不同的密钥对
+RSAKeyPair keyPair1 = encodeLib.GenerateRSAKeyPair();
+RSAKeyPair keyPair2 = encodeLib.GenerateRSAKeyPair();
+
+// 使用keyPair1的公钥加密
+byte[] encrypted = encodeLib.EncryptData(data, keyPair1.PublicKey);
+
+// ✅ 使用匹配的私钥解密 - 成功
+byte[] decrypted1 = encodeLib.DecryptData(encrypted, keyPair1.PrivateKey);
+
+// ❌ 使用不匹配的私钥解密 - 抛出异常
+try 
+{
+    byte[] decrypted2 = encodeLib.DecryptData(encrypted, keyPair2.PrivateKey);
+}
+catch (InvalidOperationException ex) 
+{
+    // ex.Message 包含 "ERR_INVALID_KEY" 或 "无效密钥"
+    Console.WriteLine("密钥不匹配，解密失败！");
+}
+```
+
+### 🛡️ 错误处理
+
+当使用错误私钥解密时，系统会：
+- **立即检测**：在开始解密数据前就验证密钥匹配
+- **快速失败**：避免浪费时间处理无效解密
+- **明确错误**：返回 `ERR_INVALID_KEY` (-9) 错误码
+- **安全保护**：防止生成无意义的解密结果
 
 ## 快速开始
 

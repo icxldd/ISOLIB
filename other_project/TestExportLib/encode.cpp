@@ -537,7 +537,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const char* 
 		return ERR_INVALID_HEADER;
 	}
 
-	// 读取密钥哈希值
+	// 读取存储的公钥哈希值
 	unsigned int storedKeyHash;
 	if (fread(&storedKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
 		fclose(inputFile);
@@ -553,6 +553,36 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const char* 
 		return ERR_INVALID_HEADER;
 	}
 
+	// 重构公钥指数e（标准值65537）
+	BigInt e;
+	BigIntInit(&e);
+	e.data[0] = 0x01;
+	e.data[1] = 0x00;
+	e.data[2] = 0x01;
+	e.length = 3;
+
+	// 从私钥重构对应的公钥字符串进行验证
+	char reconstructedPublicKey[1024];
+	char nHex[513], eHex[65];
+	BigIntToHexString(&n, nHex, sizeof(nHex));
+	BigIntToHexString(&e, eHex, sizeof(eHex));
+	sprintf_s(reconstructedPublicKey, sizeof(reconstructedPublicKey), "RSA-2048-PUB:%s:%s", nHex, eHex);
+
+	// 验证密钥匹配：比较重构的公钥校验和与存储的校验和
+	unsigned int reconstructedChecksum = CalculateCRC32((const unsigned char*)reconstructedPublicKey, strlen(reconstructedPublicKey));
+	if (reconstructedChecksum != storedChecksum) {
+		fclose(inputFile);
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
+	}
+
+	// 验证密钥哈希值匹配
+	unsigned int reconstructedKeyHash = CalculateKeyHash(reconstructedPublicKey);
+	if (reconstructedKeyHash != storedKeyHash) {
+		fclose(inputFile);
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
+	}
+
+	// 密钥验证通过，继续解密
 	fseek(inputFile, currentPos, SEEK_SET);
 
 	fopen_s(&outputFile, outputPath, "wb");
@@ -581,14 +611,6 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const char* 
 	// 解密数据（使用RSA-2048私钥参数）
 	size_t bytesRead;
 	long totalProcessed = 0;
-	
-	// 重构公钥指数e（标准值65537）
-	BigInt e;
-	BigIntInit(&e);
-	e.data[0] = 0x01;
-	e.data[1] = 0x00;
-	e.data[2] = 0x01;
-	e.length = 3;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		if (totalProcessed + bytesRead >= dataSize) {
@@ -669,14 +691,14 @@ int ValidateEncryptedFile(const char* filePath, const char* privateKey) {
 		return 0;
 	}
 
-	// 读取密钥哈希值
+	// 读取存储的密钥哈希值
 	unsigned int storedKeyHash;
 	if (fread(&storedKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
 		fclose(inputFile);
 		return 0;
 	}
 
-	// 验证校验和
+	// 读取存储的校验和
 	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
 	unsigned int storedChecksum;
 	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) != 1) {
@@ -684,8 +706,37 @@ int ValidateEncryptedFile(const char* filePath, const char* privateKey) {
 		return 0;
 	}
 
+	// 重构公钥指数e（标准值65537）
+	BigInt e;
+	BigIntInit(&e);
+	e.data[0] = 0x01;
+	e.data[1] = 0x00;
+	e.data[2] = 0x01;
+	e.length = 3;
+
+	// 从私钥重构对应的公钥字符串进行验证
+	char reconstructedPublicKey[1024];
+	char nHex[513], eHex[65];
+	BigIntToHexString(&n, nHex, sizeof(nHex));
+	BigIntToHexString(&e, eHex, sizeof(eHex));
+	sprintf_s(reconstructedPublicKey, sizeof(reconstructedPublicKey), "RSA-2048-PUB:%s:%s", nHex, eHex);
+
+	// 验证密钥匹配：比较重构的公钥校验和与存储的校验和
+	unsigned int reconstructedChecksum = CalculateCRC32((const unsigned char*)reconstructedPublicKey, strlen(reconstructedPublicKey));
+	if (reconstructedChecksum != storedChecksum) {
+		fclose(inputFile);
+		return 0; // 私钥与加密时使用的公钥不匹配
+	}
+
+	// 验证密钥哈希值匹配
+	unsigned int reconstructedKeyHash = CalculateKeyHash(reconstructedPublicKey);
+	if (reconstructedKeyHash != storedKeyHash) {
+		fclose(inputFile);
+		return 0; // 私钥与加密时使用的公钥不匹配
+	}
+
 	fclose(inputFile);
-	return 1; // 基本验证通过
+	return 1; // 密钥验证通过
 }
 
 // RSA-2048字节数组加密函数（仅需要公钥）
@@ -777,7 +828,7 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 	}
 	inPtr += MAGIC_HEADER_SIZE;
 
-	// 读取密钥哈希值
+	// 读取存储的密钥哈希值
 	unsigned int storedKeyHash;
 	memcpy(&storedKeyHash, inPtr, sizeof(unsigned int));
 	inPtr += sizeof(unsigned int);
@@ -786,10 +837,30 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(unsigned int);
 	size_t dataSize = inputLength - headerSize - sizeof(unsigned int);
 
-	// 验证校验和
+	// 读取存储的校验和
 	unsigned int storedChecksum;
 	memcpy(&storedChecksum, inputData + inputLength - sizeof(unsigned int), sizeof(unsigned int));
 
+	// 从私钥重构对应的公钥字符串进行验证
+	char reconstructedPublicKey[1024];
+	char nHex[513], eHex[65];
+	BigIntToHexString(&n, nHex, sizeof(nHex));
+	BigIntToHexString(&e, eHex, sizeof(eHex));
+	sprintf_s(reconstructedPublicKey, sizeof(reconstructedPublicKey), "RSA-2048-PUB:%s:%s", nHex, eHex);
+
+	// 验证密钥匹配：比较重构的公钥校验和与存储的校验和
+	unsigned int reconstructedChecksum = CalculateCRC32((const unsigned char*)reconstructedPublicKey, strlen(reconstructedPublicKey));
+	if (reconstructedChecksum != storedChecksum) {
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
+	}
+
+	// 验证密钥哈希值匹配
+	unsigned int reconstructedKeyHash = CalculateKeyHash(reconstructedPublicKey);
+	if (reconstructedKeyHash != storedKeyHash) {
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
+	}
+
+	// 密钥验证通过，分配输出内存
 	*outputData = (unsigned char*)malloc(dataSize);
 	if (!*outputData) {
 		return ERR_MEMORY_ALLOCATION_FAILED;

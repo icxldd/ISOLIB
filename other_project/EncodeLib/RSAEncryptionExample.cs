@@ -49,6 +49,10 @@ namespace EncodeLib
                 Console.WriteLine("\n5. 测试生成多个密钥对...");
                 TestMultipleKeyPairs(encodeLib);
 
+                // 测试密钥验证功能
+                Console.WriteLine("\n6. 测试密钥验证功能...");
+                TestKeyValidation(encodeLib, keyPair);
+
                 Console.WriteLine("\n=== 所有测试完成！ ===");
             }
             catch (Exception ex)
@@ -209,6 +213,131 @@ namespace EncodeLib
             catch (Exception ex)
             {
                 Console.WriteLine($"多密钥对测试失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 测试密钥验证功能
+        /// </summary>
+        private static void TestKeyValidation(EncodeLibManager encodeLib, RSAKeyPair correctKeyPair)
+        {
+            try
+            {
+                Console.WriteLine("测试密钥验证功能:");
+
+                // 生成另一个密钥对作为错误密钥
+                RSAKeyPair wrongKeyPair = encodeLib.GenerateRSAKeyPair();
+
+                // 准备测试数据
+                string originalText = "密钥验证测试数据";
+                byte[] originalData = Encoding.UTF8.GetBytes(originalText);
+
+                // 使用正确公钥加密
+                byte[] encryptedData = encodeLib.EncryptData(originalData, correctKeyPair.PublicKey);
+                Console.WriteLine($"  ✓ 使用正确公钥加密成功");
+
+                // 测试1: 使用正确私钥解密 - 应该成功
+                try
+                {
+                    byte[] decryptedData = encodeLib.DecryptData(encryptedData, correctKeyPair.PrivateKey);
+                    string decryptedText = Encoding.UTF8.GetString(decryptedData);
+                    bool success = originalText == decryptedText;
+                    Console.WriteLine($"  ✓ 使用正确私钥解密: {(success ? "成功" : "失败")}");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  ✗ 使用正确私钥解密失败: {ex.Message}");
+                }
+
+                // 测试2: 使用错误私钥解密 - 应该失败
+                try
+                {
+                    byte[] decryptedData = encodeLib.DecryptData(encryptedData, wrongKeyPair.PrivateKey);
+                    Console.WriteLine($"  ✗ 使用错误私钥解密竟然成功了！这是一个BUG！");
+                }
+                catch (InvalidOperationException ex) when (ex.Message.Contains("ERR_INVALID_KEY") || ex.Message.Contains("无效密钥"))
+                {
+                    Console.WriteLine($"  ✓ 使用错误私钥解密正确失败: 密钥验证有效");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"  ? 使用错误私钥解密失败，但错误类型不符合预期: {ex.Message}");
+                }
+
+                // 测试3: 文件加密解密的密钥验证
+                string tempDir = Path.GetTempPath();
+                string originalFile = Path.Combine(tempDir, "key_validation_test.txt");
+                string encryptedFile = Path.Combine(tempDir, "key_validation_test.dat");
+                string decryptedFile1 = Path.Combine(tempDir, "key_validation_decrypted_correct.txt");
+                string decryptedFile2 = Path.Combine(tempDir, "key_validation_decrypted_wrong.txt");
+
+                try
+                {
+                    // 创建测试文件
+                    File.WriteAllText(originalFile, "文件密钥验证测试内容", Encoding.UTF8);
+
+                    // 使用正确公钥加密文件
+                    int encryptResult = encodeLib.EncryptFile(originalFile, encryptedFile, correctKeyPair.PublicKey);
+                    if (encryptResult == 0)
+                    {
+                        Console.WriteLine($"  ✓ 文件加密成功");
+
+                        // 使用正确私钥解密 - 应该成功
+                        int decryptResult1 = encodeLib.DecryptFile(encryptedFile, decryptedFile1, correctKeyPair.PrivateKey);
+                        if (decryptResult1 == 0)
+                        {
+                            Console.WriteLine($"  ✓ 使用正确私钥解密文件成功");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  ✗ 使用正确私钥解密文件失败: {EncodeLibManager.GetErrorMessage(decryptResult1)}");
+                        }
+
+                        // 使用错误私钥解密 - 应该失败
+                        int decryptResult2 = encodeLib.DecryptFile(encryptedFile, decryptedFile2, wrongKeyPair.PrivateKey);
+                        if (decryptResult2 == -9) // ERR_INVALID_KEY
+                        {
+                            Console.WriteLine($"  ✓ 使用错误私钥解密文件正确失败: 密钥验证有效");
+                        }
+                        else if (decryptResult2 != 0)
+                        {
+                            Console.WriteLine($"  ? 使用错误私钥解密文件失败，但错误码不符合预期: {EncodeLibManager.GetErrorMessage(decryptResult2)}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"  ✗ 使用错误私钥解密文件竟然成功了！这是一个BUG！");
+                        }
+
+                        // 测试文件验证功能
+                        bool validationCorrect = encodeLib.ValidateEncryptedFile(encryptedFile, correctKeyPair.PrivateKey);
+                        bool validationWrong = encodeLib.ValidateEncryptedFile(encryptedFile, wrongKeyPair.PrivateKey);
+                        
+                        Console.WriteLine($"  ✓ 正确私钥验证文件: {validationCorrect}");
+                        Console.WriteLine($"  ✓ 错误私钥验证文件: {validationWrong} (应该为False)");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"  ✗ 文件加密失败: {EncodeLibManager.GetErrorMessage(encryptResult)}");
+                    }
+                }
+                finally
+                {
+                    // 清理临时文件
+                    try
+                    {
+                        if (File.Exists(originalFile)) File.Delete(originalFile);
+                        if (File.Exists(encryptedFile)) File.Delete(encryptedFile);
+                        if (File.Exists(decryptedFile1)) File.Delete(decryptedFile1);
+                        if (File.Exists(decryptedFile2)) File.Delete(decryptedFile2);
+                    }
+                    catch { }
+                }
+
+                Console.WriteLine("  密钥验证测试完成");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"密钥验证测试失败: {ex.Message}");
             }
         }
 
