@@ -69,13 +69,7 @@ void BigIntFromBytes(BigInt* num, const unsigned char* bytes, int length) {
 	memcpy(num->data, bytes, length);
 	num->length = length;
 	
-	// 对于RSA-2048的关键组件（128字节的p,q或256字节的n,d），保持完整长度
-	if (length == 128 || length == 256) {
-		// 保持RSA-2048组件的完整长度，不移除前导零
-		return;
-	}
-	
-	// 对于其他情况，移除前导零
+	// 移除前导零，但至少保留一个字节
 	while (num->length > 1 && num->data[num->length - 1] == 0) {
 		num->length--;
 	}
@@ -92,24 +86,17 @@ void BigIntToHexString(const BigInt* num, char* hexStr, int maxLen) {
 		return;
 	}
 	
-	// 如果是其他小数值（长度<=8且不是标准e）
-	if (num->length <= 8) {
-		// 对于小数值，按实际长度输出
-		for (int i = num->length - 1; i >= 0 && pos < maxLen - 3; i--) {
-			sprintf_s(hexStr + pos, maxLen - pos, "%02X", num->data[i]);
-			pos += 2;
-		}
-	} else {
-		// 对于大数值（如n和d），确保输出256字节（512个十六进制字符）
-		int targetLength = 256; // 2048位 = 256字节
-		
-		// 从最高字节开始输出，包括前导零
-		for (int i = targetLength - 1; i >= 0 && pos < maxLen - 3; i--) {
-			unsigned char byteVal = (i < num->length) ? num->data[i] : 0;
-			sprintf_s(hexStr + pos, maxLen - pos, "%02X", byteVal);
-			pos += 2;
-		}
+	// 统一处理：从最高字节开始输出，移除前导零
+	int startIdx = num->length - 1;
+	while (startIdx > 0 && num->data[startIdx] == 0) {
+		startIdx--;
 	}
+	
+	for (int i = startIdx; i >= 0 && pos < maxLen - 3; i--) {
+		sprintf_s(hexStr + pos, maxLen - pos, "%02X", num->data[i]);
+		pos += 2;
+	}
+	
 	hexStr[pos] = '\0';
 }
 
@@ -789,14 +776,14 @@ int ValidateEncryptedFile(const char* filePath, const char* privateKey) {
 	unsigned int reconstructedChecksum = CalculateCRC32((const unsigned char*)reconstructedPublicKey, strlen(reconstructedPublicKey));
 	if (reconstructedChecksum != storedChecksum) {
 		fclose(inputFile);
-		return 0; // 私钥与加密时使用的公钥不匹配
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
 	}
 
 	// 验证密钥哈希值匹配
 	unsigned int reconstructedKeyHash = CalculateKeyHash(reconstructedPublicKey);
 	if (reconstructedKeyHash != storedKeyHash) {
 		fclose(inputFile);
-		return 0; // 私钥与加密时使用的公钥不匹配
+		return ERR_INVALID_KEY; // 私钥与加密时使用的公钥不匹配
 	}
 
 	fclose(inputFile);

@@ -51,7 +51,7 @@
     <Compile Include="WindowsDllManager.cs" />
   </ItemGroup>
   <ItemGroup>
-    <Content Include="ExportLib.vmp.dll">
+    <Content Include="ExportLib.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
   </ItemGroup>
