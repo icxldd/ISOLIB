@@ -24,55 +24,41 @@ namespace EncodeLib
         private IntPtr dllHandle = IntPtr.Zero;
         private bool disposed = false;
 
-        // 委托定义 - 与原始DllImport声明对应
+        // 密钥对结构（与C++端对应）
+        [StructLayout(LayoutKind.Sequential)]
+        public struct KeyPair
+        {
+            public IntPtr publicKey;   // char* 公钥字符串指针
+            public IntPtr privateKey;  // char* 私钥字符串指针
+        }
+
+        // 委托定义 - RSA-2048非对称加密系统
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
+        public delegate int GenerateKeyPairsDelegate(int count, [Out] KeyPair[] keyPairs);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void HelloWord2Delegate(UInt32 hh);
-
-        // 双密钥系统函数委托
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate int InitStreamFileDelegate([MarshalAs(UnmanagedType.LPStr)] string privateKey);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void ClearPrivateKeyDelegate();
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate int IsPrivateKeySetDelegate();
+        public delegate void FreeKeyPairsDelegate(int count, KeyPair[] keyPairs);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int StreamEncryptFileDelegate(
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
             [MarshalAs(UnmanagedType.LPStr)] string outputPath,
-            [MarshalAs(UnmanagedType.LPStr)] string key,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
             ProgressCallback progressCallback);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int StreamDecryptFileDelegate(
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
             [MarshalAs(UnmanagedType.LPStr)] string outputPath,
-            [MarshalAs(UnmanagedType.LPStr)] string key,
+            [MarshalAs(UnmanagedType.LPStr)] string privateKey,
             ProgressCallback progressCallback);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int ValidateEncryptedFileDelegate(
             [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            [MarshalAs(UnmanagedType.LPStr)] string key);
+            [MarshalAs(UnmanagedType.LPStr)] string privateKey);
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate int GetNTPTimestampDelegate(out long timestamp);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate int GetNTPTimestampFromServerDelegate(
-            [MarshalAs(UnmanagedType.LPStr)] string server,
-            out long timestamp,
-            int timeoutMs);
-
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate long GetLocalTimestampDelegate();
-
-        // 新增：字节数组加解密函数委托
+        // 字节数组加解密函数委托
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int StreamEncryptDataDelegate(
             IntPtr inputData,
@@ -85,7 +71,7 @@ namespace EncodeLib
         public delegate int StreamDecryptDataDelegate(
             IntPtr inputData,
             UIntPtr inputLength,
-            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            [MarshalAs(UnmanagedType.LPStr)] string privateKey,
             out IntPtr outputData,
             out UIntPtr outputLength);
 
@@ -95,21 +81,34 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void FreeDecryptedDataDelegate(IntPtr data);
 
-        // 双密钥系统函数实例
-        public InitStreamFileDelegate InitStreamFile { get; private set; }
-        public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
-        public IsPrivateKeySetDelegate IsPrivateKeySet { get; private set; }
+        // 辅助函数委托
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate uint CalculateCRC32Delegate(IntPtr data, UIntPtr length);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate uint CalculateKeyHashDelegate([MarshalAs(UnmanagedType.LPStr)] string key);
+
+        // RSA-2048非对称加密系统函数实例
+        public GenerateKeyPairsDelegate GenerateKeyPairs { get; private set; }
+        public FreeKeyPairsDelegate FreeKeyPairs { get; private set; }
         
         public StreamEncryptFileDelegate StreamEncryptFile { get; private set; }
         public StreamDecryptFileDelegate StreamDecryptFile { get; private set; }
         public ValidateEncryptedFileDelegate ValidateEncryptedFile { get; private set; }
-        public GetNTPTimestampDelegate GetNTPTimestamp { get; private set; }
-        
-        // 新增：字节数组加解密函数实例
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetNTPTimestampDelegate(out long timestamp);
+
+        // 字节数组加解密函数实例
         public StreamEncryptDataDelegate StreamEncryptData { get; private set; }
         public StreamDecryptDataDelegate StreamDecryptData { get; private set; }
         public FreeEncryptedDataDelegate FreeEncryptedData { get; private set; }
         public FreeDecryptedDataDelegate FreeDecryptedData { get; private set; }
+        public GetNTPTimestampDelegate GetNTPTimestamp { get; private set; }
+
+        // 辅助函数实例
+        public CalculateCRC32Delegate CalculateCRC32 { get; private set; }
+        public CalculateKeyHashDelegate CalculateKeyHash { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL
@@ -163,21 +162,25 @@ namespace EncodeLib
         {
             try
             {
-                // 双密钥系统函数
-                InitStreamFile = GetDelegateFromFuncName<InitStreamFileDelegate>("InitStreamFile");
-                ClearPrivateKey = GetDelegateFromFuncName<ClearPrivateKeyDelegate>("ClearPrivateKey");
-                IsPrivateKeySet = GetDelegateFromFuncName<IsPrivateKeySetDelegate>("IsPrivateKeySet");
+                // RSA-2048密钥对生成函数
+                GenerateKeyPairs = GetDelegateFromFuncName<GenerateKeyPairsDelegate>("GenerateKeyPairs");
+                FreeKeyPairs = GetDelegateFromFuncName<FreeKeyPairsDelegate>("FreeKeyPairs");
                 
-                // 获取所有导出函数的委托
+                // 非对称加密文件函数
                 StreamEncryptFile = GetDelegateFromFuncName<StreamEncryptFileDelegate>("StreamEncryptFile");
                 StreamDecryptFile = GetDelegateFromFuncName<StreamDecryptFileDelegate>("StreamDecryptFile");
+                ValidateEncryptedFile = GetDelegateFromFuncName<ValidateEncryptedFileDelegate>("ValidateEncryptedFile");
                 GetNTPTimestamp = GetDelegateFromFuncName<GetNTPTimestampDelegate>("GetNTPTimestamp");
-                
-                // 新增：字节数组加解密函数委托
+
+                // 字节数组加解密函数
                 StreamEncryptData = GetDelegateFromFuncName<StreamEncryptDataDelegate>("StreamEncryptData");
                 StreamDecryptData = GetDelegateFromFuncName<StreamDecryptDataDelegate>("StreamDecryptData");
                 FreeEncryptedData = GetDelegateFromFuncName<FreeEncryptedDataDelegate>("FreeEncryptedData");
                 FreeDecryptedData = GetDelegateFromFuncName<FreeDecryptedDataDelegate>("FreeDecryptedData");
+
+                // 辅助函数
+                CalculateCRC32 = GetDelegateFromFuncName<CalculateCRC32Delegate>("CalculateCRC32");
+                CalculateKeyHash = GetDelegateFromFuncName<CalculateKeyHashDelegate>("CalculateKeyHash");
             }
             catch (EntryPointNotFoundException ex)
             {

@@ -40,6 +40,7 @@
             this.button3 = new System.Windows.Forms.Button();
             this.button6 = new System.Windows.Forms.Button();
             this.button7 = new System.Windows.Forms.Button();
+            this.button8 = new System.Windows.Forms.Button();
             this.SuspendLayout();
             // 
             // button1
@@ -153,6 +154,16 @@
             this.button7.UseVisualStyleBackColor = true;
             this.button7.Click += new System.EventHandler(this.button7_Click);
             // 
+            // button8
+            // 
+            this.button8.Location = new System.Drawing.Point(664, 59);
+            this.button8.Name = "button8";
+            this.button8.Size = new System.Drawing.Size(75, 23);
+            this.button8.TabIndex = 1;
+            this.button8.Text = "解密更换";
+            this.button8.UseVisualStyleBackColor = true;
+            this.button8.Click += new System.EventHandler(this.button8_Click);
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -168,6 +179,7 @@
             this.Controls.Add(this.文件路径);
             this.Controls.Add(this.textBox2);
             this.Controls.Add(this.textBox1);
+            this.Controls.Add(this.button8);
             this.Controls.Add(this.button2);
             this.Controls.Add(this.button1);
             this.Name = "Form1";
@@ -191,6 +203,7 @@
         private System.Windows.Forms.Button button3;
         private System.Windows.Forms.Button button6;
         private System.Windows.Forms.Button button7;
+        private System.Windows.Forms.Button button8;
     }
 }
 
