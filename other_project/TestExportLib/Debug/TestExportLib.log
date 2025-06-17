@@ -39,30 +39,30 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(503,5): warning C4273
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(47,17):
       参见“StreamDecryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(594,34): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(616,34): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(642,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(664,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(53,17):
       参见“ValidateEncryptedFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(692,5): warning C4273: “StreamEncryptData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(743,5): warning C4273: “StreamEncryptData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(63,17):
       参见“StreamEncryptData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(746,5): warning C4273: “StreamDecryptData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(797,5): warning C4273: “StreamDecryptData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(73,17):
       参见“StreamDecryptData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(818,6): warning C4273: “FreeEncryptedData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(889,6): warning C4273: “FreeEncryptedData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(77,18):
       参见“FreeEncryptedData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(824,6): warning C4273: “FreeDecryptedData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(895,6): warning C4273: “FreeDecryptedData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(81,18):
       参见“FreeDecryptedData”的前一个定义

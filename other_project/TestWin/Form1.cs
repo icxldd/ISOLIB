@@ -765,7 +765,7 @@ namespace TestWin
                 richTextBox1.AppendText($"转换为字节数组: {inputBytes.Length} 字节\r\n");
 
                 // 调用加密方法
-                byte[] encryptedData = EncodeLibManager.Instance.EncryptData(inputBytes, publicKey);
+                byte[] encryptedData = EncodeLibManager.Instance.EncryptData(inputBytes, temp.PublicKey);
 
                 // 将加密后的数据转换为Base64字符串便于显示和存储
                 string encryptedBase64 = Convert.ToBase64String(encryptedData);
@@ -833,7 +833,7 @@ namespace TestWin
                 }
 
                 // 调用解密方法
-                byte[] decryptedData = EncodeLibManager.Instance.DecryptData(encryptedData, publicKey);
+                byte[] decryptedData = EncodeLibManager.Instance.DecryptData(encryptedData, temp.PrivateKey);
 
                 // 将解密后的字节数组转换为字符串
                 string decryptedText = Encoding.UTF8.GetString(decryptedData);
