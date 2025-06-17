@@ -6,63 +6,66 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1,1): warning C4819: 
 D:\work\code\ISOLib\other_project\TestExportLib\encode.h(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(209,5): warning C4273: “GenerateKeyPairs”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(258,5): warning C4273: “GenerateKeyPairs”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(28,17):
       参见“GenerateKeyPairs”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(217,19): warning C4101: “phi”: 未引用的局部变量
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(266,19): warning C4101: “phi”: 未引用的局部变量
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(265,6): warning C4273: “FreeKeyPairs”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(320,6): warning C4273: “FreeKeyPairs”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(33,18):
       参见“FreeKeyPairs”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(332,14): warning C4273: “CalculateCRC32”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(383,14): warning C4273: “CalculateCRC32”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(84,26):
       参见“CalculateCRC32”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(387,14): warning C4273: “CalculateKeyHash”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(438,14): warning C4273: “CalculateKeyHash”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(87,26):
       参见“CalculateKeyHash”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(397,5): warning C4273: “StreamEncryptFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(448,5): warning C4273: “StreamEncryptFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(40,17):
       参见“StreamEncryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(503,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(554,5): warning C4273: “StreamDecryptFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(47,17):
       参见“StreamDecryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(616,34): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(667,34): warning C4018: “>=”: 有符号/无符号不匹配
   (编译源文件“/encode.cpp”)
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(664,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(715,5): warning C4273: “ValidateEncryptedFile”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(53,17):
       参见“ValidateEncryptedFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(743,5): warning C4273: “StreamEncryptData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(794,5): warning C4273: “StreamEncryptData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(63,17):
       参见“StreamEncryptData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(797,5): warning C4273: “StreamDecryptData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(848,5): warning C4273: “StreamDecryptData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(73,17):
       参见“StreamDecryptData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(889,6): warning C4273: “FreeEncryptedData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(905,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(940,6): warning C4273: “FreeEncryptedData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(77,18):
       参见“FreeEncryptedData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(895,6): warning C4273: “FreeDecryptedData”: dll 链接不一致
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(946,6): warning C4273: “FreeDecryptedData”: dll 链接不一致
   (编译源文件“/encode.cpp”)
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(81,18):
       参见“FreeDecryptedData”的前一个定义
