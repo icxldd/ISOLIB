@@ -69,7 +69,13 @@ void BigIntFromBytes(BigInt* num, const unsigned char* bytes, int length) {
 	memcpy(num->data, bytes, length);
 	num->length = length;
 	
-	// 移除前导零
+	// 对于RSA-2048的关键组件（128字节的p,q或256字节的n,d），保持完整长度
+	if (length == 128 || length == 256) {
+		// 保持RSA-2048组件的完整长度，不移除前导零
+		return;
+	}
+	
+	// 对于其他情况，移除前导零
 	while (num->length > 1 && num->data[num->length - 1] == 0) {
 		num->length--;
 	}
@@ -79,9 +85,16 @@ void BigIntFromBytes(BigInt* num, const unsigned char* bytes, int length) {
 void BigIntToHexString(const BigInt* num, char* hexStr, int maxLen) {
 	int pos = 0;
 	
-	// 如果是小数值（如公钥指数e），直接按实际长度输出
+	// 特殊处理：如果是公钥指数e（长度为3且值为65537）
+	if (num->length == 3 && num->data[0] == 0x01 && num->data[1] == 0x00 && num->data[2] == 0x01) {
+		// 对于标准的e=65537，输出010001
+		strcpy_s(hexStr, maxLen, "010001");
+		return;
+	}
+	
+	// 如果是其他小数值（长度<=8且不是标准e）
 	if (num->length <= 8) {
-		// 对于e等小数值，按实际长度输出
+		// 对于小数值，按实际长度输出
 		for (int i = num->length - 1; i >= 0 && pos < maxLen - 3; i--) {
 			sprintf_s(hexStr + pos, maxLen - pos, "%02X", num->data[i]);
 			pos += 2;
