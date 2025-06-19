@@ -5,6 +5,7 @@
 #include <string.h>
 #include <windows.h>
 #include <process.h>
+#include <wincrypt.h>
 
 // 加密算法相关常量定义
 #define BUFFER_SIZE 4096                   // 标准缓冲区大小
@@ -876,4 +877,903 @@ void FreeDecryptedData(unsigned char* data) {
 	if (data) {
 		free(data);
 	}
+}
+
+// ========== 自包含式加密/解密系统实现 ==========
+
+#define SELF_CONTAINED_MAGIC_HEADER "SELFV1.0"     // 自包含式加密文件魔数头
+#define SELF_CONTAINED_MAGIC_SIZE 8                // 自包含式魔数头大小
+#define PRIVATE_KEY_SIZE_2048_BITS 256             // 2048位私钥大小（256字节）
+
+// 生成2048位随机私钥
+int Generate2048BitPrivateKey(unsigned char* privateKey, int* keyLength) {
+	if (!privateKey || !keyLength) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 使用Windows CryptoAPI生成高质量随机数
+	HCRYPTPROV hProv = 0;
+	if (!CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+		return ERR_ENCRYPTION_FAILED;
+	}
+
+	// 生成256字节（2048位）的随机私钥
+	if (!CryptGenRandom(hProv, PRIVATE_KEY_SIZE_2048_BITS, privateKey)) {
+		CryptReleaseContext(hProv, 0);
+		return ERR_ENCRYPTION_FAILED;
+	}
+
+	CryptReleaseContext(hProv, 0);
+	*keyLength = PRIVATE_KEY_SIZE_2048_BITS;
+
+	return SUCCESS;
+}
+
+// 计算私钥哈希值用于完整性验证
+unsigned int CalculatePrivateKeyHash(const unsigned char* privateKey, int keyLength) {
+	if (!privateKey || keyLength <= 0) {
+		return 0;
+	}
+
+	// 使用双重哈希确保私钥完整性
+	unsigned int hash1 = CalculateCRC32(privateKey, keyLength);
+	unsigned int hash2 = 0;
+
+	// 第二轮哈希：增强安全性
+	for (int i = 0; i < keyLength; i++) {
+		hash2 = ((hash2 << 7) + hash2) + privateKey[i];
+		hash2 ^= (hash2 >> 13);
+		hash2 += (hash2 << 5);
+		hash2 ^= (hash2 >> 7);
+		hash2 += (hash2 << 3);
+		hash2 ^= (hash2 >> 17);
+		hash2 += (hash2 << 11);
+	}
+
+	// 组合两个哈希值，增加复杂度
+	return hash1 ^ hash2 ^ 0xABCDEF01;
+}
+
+// 自包含式文件加密函数
+int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
+	FILE* inputFile = NULL;
+	FILE* outputFile = NULL;
+	unsigned char* buffer = NULL;
+	unsigned char* privateKey = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	int privateKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
+
+	if (!filePath || !outputPath || !publicKey) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 分配私钥缓冲区
+	privateKey = (unsigned char*)malloc(PRIVATE_KEY_SIZE_2048_BITS);
+	if (!privateKey) {
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 生成2048位随机私钥
+	result = Generate2048BitPrivateKey(privateKey, &privateKeyLength);
+	if (result != SUCCESS) {
+		free(privateKey);
+		return result;
+	}
+
+	// 使用生成的私钥组合公钥
+	int pubKeyLen = strlen((const char*)publicKey);
+	if (pubKeyLen == 0) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 组合私钥和公钥（使用相同的交错算法）
+	int totalLen = privateKeyLength + pubKeyLen;
+	combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 交错组合两个密钥
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			combinedKey[i] = privateKey[i / 2 % privateKeyLength];
+		}
+		else {
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+	combinedKey[totalLen] = '\0';
+	combinedKeyLength = totalLen;
+
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 获取文件大小
+	fseek(inputFile, 0, SEEK_END);
+	long totalFileSize = ftell(inputFile);
+	fseek(inputFile, 0, SEEK_SET);
+
+	// 打开输出文件
+	fopen_s(&outputFile, outputPath, "wb");
+	if (!outputFile) {
+		fclose(inputFile);
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 分配缓冲区
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
+	if (!buffer) {
+		fclose(inputFile);
+		fclose(outputFile);
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 写入自包含式文件头
+	fwrite(SELF_CONTAINED_MAGIC_HEADER, 1, SELF_CONTAINED_MAGIC_SIZE, outputFile);
+	fwrite(&combinedKeyLength, sizeof(int), 1, outputFile);
+
+	// 写入公钥哈希值
+	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
+	fwrite(&publicKeyHash, sizeof(unsigned int), 1, outputFile);
+
+	// 写入私钥长度和私钥数据
+	fwrite(&privateKeyLength, sizeof(int), 1, outputFile);
+	fwrite(privateKey, 1, privateKeyLength, outputFile);
+
+	// 写入私钥哈希值用于完整性验证
+	unsigned int privateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	fwrite(&privateKeyHash, sizeof(unsigned int), 1, outputFile);
+
+	// 进度回调初始化
+	if (progressCallback) {
+		progressCallback(filePath, 0.0);
+	}
+
+	// 加密文件数据
+	size_t bytesRead;
+	long totalProcessed = 0;
+
+	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 使用相同的双层XOR + 半字节交换加密算法
+		for (size_t i = 0; i < bytesRead; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = buffer[i];
+			unsigned char a2 = a1 ^ keyByte;
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+			unsigned char a4 = a3 ^ keyByte;
+			buffer[i] = a4;
+		}
+
+		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		if (bytesWritten != bytesRead) {
+			result = ERR_ENCRYPTION_FAILED;
+			break;
+		}
+
+		totalProcessed += bytesRead;
+
+		// 进度回调
+		if (progressCallback && totalFileSize > 0) {
+			double dataProgress = (double)totalProcessed / (double)totalFileSize;
+			double adjustedProgress = dataProgress * 0.98;
+			progressCallback(filePath, adjustedProgress);
+		}
+	}
+
+	// 写入校验和
+	if (result == SUCCESS) {
+		if (progressCallback) {
+			progressCallback(filePath, 0.99);
+		}
+
+		unsigned int checksum = CalculateCRC32(combinedKey, combinedKeyLength);
+		fwrite(&checksum, sizeof(unsigned int), 1, outputFile);
+
+		if (progressCallback) {
+			progressCallback(filePath, 1.0);
+		}
+	}
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	SecureZeroMemory(combinedKey, combinedKeyLength);
+	free(privateKey);
+	free(combinedKey);
+	free(buffer);
+	fclose(inputFile);
+	fclose(outputFile);
+
+	return result;
+}
+
+// 自包含式文件解密函数
+int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
+	FILE* inputFile = NULL;
+	FILE* outputFile = NULL;
+	unsigned char* buffer = NULL;
+	unsigned char* privateKey = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+	int privateKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;
+
+	if (!filePath || !outputPath || !publicKey) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 读取并验证文件头
+	if (fread(header, 1, SELF_CONTAINED_MAGIC_SIZE, inputFile) != SELF_CONTAINED_MAGIC_SIZE) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取组合密钥长度
+	if (fread(&storedCombinedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取并验证公钥哈希值
+	unsigned int storedPublicKeyHash;
+	if (fread(&storedPublicKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 读取私钥长度
+	if (fread(&privateKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	if (privateKeyLength != PRIVATE_KEY_SIZE_2048_BITS) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥
+	privateKey = (unsigned char*)malloc(privateKeyLength);
+	if (!privateKey) {
+		fclose(inputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	if (fread(privateKey, 1, privateKeyLength, inputFile) != privateKeyLength) {
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取并验证私钥哈希值
+	unsigned int storedPrivateKeyHash;
+	if (fread(&storedPrivateKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPrivateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	if (storedPrivateKeyHash != currentPrivateKeyHash) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 私钥被篡改
+	}
+
+	// 重新组合私钥和公钥
+	int pubKeyLen = strlen((const char*)publicKey);
+	int totalLen = privateKeyLength + pubKeyLen;
+	combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			combinedKey[i] = privateKey[i / 2 % privateKeyLength];
+		}
+		else {
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+	combinedKey[totalLen] = '\0';
+	combinedKeyLength = totalLen;
+
+	// 验证组合密钥长度
+	if (storedCombinedKeyLength != combinedKeyLength) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 立即验证校验和
+	long currentPos = ftell(inputFile);
+	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	unsigned int storedChecksum;
+	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+		unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
+		if (storedChecksum != calculatedChecksum) {
+			SecureZeroMemory(privateKey, privateKeyLength);
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(privateKey);
+			free(combinedKey);
+			fclose(inputFile);
+			return ERR_DECRYPTION_FAILED;
+		}
+	}
+	else {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 恢复文件位置
+	fseek(inputFile, currentPos, SEEK_SET);
+
+	// 打开输出文件
+	fopen_s(&outputFile, outputPath, "wb");
+	if (!outputFile) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 分配缓冲区
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
+	if (!buffer) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		fclose(outputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 计算数据区大小
+	fseek(inputFile, 0, SEEK_END);
+	long fileSize = ftell(inputFile);
+	fseek(inputFile, currentPos, SEEK_SET);
+	long dataSize = fileSize - currentPos - sizeof(unsigned int);
+
+	// 进度回调初始化
+	if (progressCallback) {
+		progressCallback(filePath, 0.0);
+	}
+
+	// 解密文件数据
+	size_t bytesRead;
+	long totalProcessed = 0;
+
+	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 处理包含校验和的最后数据块
+		if (totalProcessed + bytesRead >= dataSize) {
+			bytesRead = dataSize - totalProcessed;
+			if (bytesRead <= 0) break;
+		}
+
+		// 使用相同的双层XOR + 半字节交换解密算法
+		for (size_t i = 0; i < bytesRead; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = buffer[i];
+			unsigned char a2 = a1 ^ keyByte;
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+			unsigned char a4 = a3 ^ keyByte;
+			buffer[i] = a4;
+		}
+
+		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		if (bytesWritten != bytesRead) {
+			result = ERR_DECRYPTION_FAILED;
+			break;
+		}
+
+		totalProcessed += bytesRead;
+
+		// 进度回调
+		if (progressCallback && dataSize > 0) {
+			double dataProgress = (double)totalProcessed / (double)dataSize;
+			progressCallback(filePath, dataProgress);
+		}
+	}
+
+	// 解密完成
+	if (result == SUCCESS) {
+		if (progressCallback) {
+			progressCallback(filePath, 1.0);
+		}
+	}
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	SecureZeroMemory(combinedKey, combinedKeyLength);
+	free(privateKey);
+	free(combinedKey);
+	free(buffer);
+	fclose(inputFile);
+	fclose(outputFile);
+
+	if (result != SUCCESS) {
+		remove(outputPath);
+	}
+
+	return result;
+}
+
+// 自包含式数据加密函数
+int SelfContainedEncryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength) {
+	unsigned char* privateKey = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	int privateKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	if (!inputData || inputLength == 0 || !publicKey || !outputData || !outputLength) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	*outputData = NULL;
+	*outputLength = 0;
+
+	// 分配私钥缓冲区并生成私钥
+	privateKey = (unsigned char*)malloc(PRIVATE_KEY_SIZE_2048_BITS);
+	if (!privateKey) {
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	result = Generate2048BitPrivateKey(privateKey, &privateKeyLength);
+	if (result != SUCCESS) {
+		free(privateKey);
+		return result;
+	}
+
+	// 组合私钥和公钥
+	int pubKeyLen = strlen((const char*)publicKey);
+	if (pubKeyLen == 0) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_INVALID_PARAMETER;
+	}
+
+	int totalLen = privateKeyLength + pubKeyLen;
+	combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			combinedKey[i] = privateKey[i / 2 % privateKeyLength];
+		}
+		else {
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+	combinedKey[totalLen] = '\0';
+	combinedKeyLength = totalLen;
+
+	// 计算输出大小
+	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
+	size_t outputSize = headerSize + inputLength + sizeof(unsigned int);
+
+	// 分配输出缓冲区
+	*outputData = (unsigned char*)malloc(outputSize);
+	if (!*outputData) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	unsigned char* outPtr = *outputData;
+
+	// 写入文件头
+	memcpy(outPtr, SELF_CONTAINED_MAGIC_HEADER, SELF_CONTAINED_MAGIC_SIZE);
+	outPtr += SELF_CONTAINED_MAGIC_SIZE;
+
+	memcpy(outPtr, &combinedKeyLength, sizeof(int));
+	outPtr += sizeof(int);
+
+	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
+	memcpy(outPtr, &publicKeyHash, sizeof(unsigned int));
+	outPtr += sizeof(unsigned int);
+
+	memcpy(outPtr, &privateKeyLength, sizeof(int));
+	outPtr += sizeof(int);
+
+	memcpy(outPtr, privateKey, privateKeyLength);
+	outPtr += privateKeyLength;
+
+	unsigned int privateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	memcpy(outPtr, &privateKeyHash, sizeof(unsigned int));
+	outPtr += sizeof(unsigned int);
+
+	// 加密数据
+	for (size_t i = 0; i < inputLength; i++) {
+		unsigned char keyByte = combinedKey[i % combinedKeyLength];
+		unsigned char a1 = inputData[i];
+		unsigned char a2 = a1 ^ keyByte;
+		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+		unsigned char a4 = a3 ^ keyByte;
+		outPtr[i] = a4;
+	}
+	outPtr += inputLength;
+
+	// 写入校验和
+	unsigned int checksum = CalculateCRC32(combinedKey, combinedKeyLength);
+	memcpy(outPtr, &checksum, sizeof(unsigned int));
+
+	*outputLength = outputSize;
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	SecureZeroMemory(combinedKey, combinedKeyLength);
+	free(privateKey);
+	free(combinedKey);
+
+	return SUCCESS;
+}
+
+// 自包含式数据解密函数
+int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength) {
+	unsigned char* privateKey = NULL;
+	unsigned char* combinedKey = NULL;
+	int result = SUCCESS;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+	int privateKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	if (!inputData || inputLength == 0 || !publicKey || !outputData || !outputLength) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	*outputData = NULL;
+	*outputLength = 0;
+
+	// 检查最小长度
+	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int) + sizeof(unsigned int);
+	if (inputLength < minSize) {
+		return ERR_INVALID_HEADER;
+	}
+
+	const unsigned char* inPtr = inputData;
+
+	// 验证文件头
+	memcpy(header, inPtr, SELF_CONTAINED_MAGIC_SIZE);
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		return ERR_INVALID_HEADER;
+	}
+	inPtr += SELF_CONTAINED_MAGIC_SIZE;
+
+	// 读取组合密钥长度
+	memcpy(&storedCombinedKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	memcpy(&storedPublicKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥长度
+	memcpy(&privateKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	if (privateKeyLength != PRIVATE_KEY_SIZE_2048_BITS) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥
+	privateKey = (unsigned char*)malloc(privateKeyLength);
+	if (!privateKey) {
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	memcpy(privateKey, inPtr, privateKeyLength);
+	inPtr += privateKeyLength;
+
+	// 验证私钥哈希
+	unsigned int storedPrivateKeyHash;
+	memcpy(&storedPrivateKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPrivateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	if (storedPrivateKeyHash != currentPrivateKeyHash) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 重新组合密钥
+	int pubKeyLen = strlen((const char*)publicKey);
+	int totalLen = privateKeyLength + pubKeyLen;
+	combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			combinedKey[i] = privateKey[i / 2 % privateKeyLength];
+		}
+		else {
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+	combinedKey[totalLen] = '\0';
+	combinedKeyLength = totalLen;
+
+	// 验证组合密钥长度
+	if (storedCombinedKeyLength != combinedKeyLength) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 验证校验和
+	unsigned int storedChecksum;
+	memcpy(&storedChecksum, inputData + inputLength - sizeof(unsigned int), sizeof(unsigned int));
+	unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
+	if (storedChecksum != calculatedChecksum) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 计算数据大小
+	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
+	size_t dataSize = inputLength - headerSize - sizeof(unsigned int);
+
+	// 分配输出缓冲区
+	*outputData = (unsigned char*)malloc(dataSize);
+	if (!*outputData) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 解密数据
+	for (size_t i = 0; i < dataSize; i++) {
+		unsigned char keyByte = combinedKey[i % combinedKeyLength];
+		unsigned char a1 = inPtr[i];
+		unsigned char a2 = a1 ^ keyByte;
+		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+		unsigned char a4 = a3 ^ keyByte;
+		(*outputData)[i] = a4;
+	}
+
+	*outputLength = dataSize;
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	SecureZeroMemory(combinedKey, combinedKeyLength);
+	free(privateKey);
+	free(combinedKey);
+
+	return SUCCESS;
+}
+
+// 验证自包含式加密文件有效性
+int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicKey) {
+	FILE* inputFile = NULL;
+	unsigned char* privateKey = NULL;
+	unsigned char* combinedKey = NULL;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+	int privateKeyLength = 0;
+	int combinedKeyLength = 0;
+	bool isValid = false;
+
+	if (!filePath || !publicKey) {
+		return 0;
+	}
+
+	// 打开文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		return 0;
+	}
+
+	// 验证文件头
+	if (fread(header, 1, SELF_CONTAINED_MAGIC_SIZE, inputFile) != SELF_CONTAINED_MAGIC_SIZE) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 读取组合密钥长度
+	if (fread(&storedCombinedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	if (fread(&storedPublicKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 读取私钥长度
+	if (fread(&privateKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	if (privateKeyLength != PRIVATE_KEY_SIZE_2048_BITS) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 读取私钥
+	privateKey = (unsigned char*)malloc(privateKeyLength);
+	if (!privateKey) {
+		fclose(inputFile);
+		return 0;
+	}
+
+	if (fread(privateKey, 1, privateKeyLength, inputFile) != privateKeyLength) {
+		free(privateKey);
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 验证私钥哈希
+	unsigned int storedPrivateKeyHash;
+	if (fread(&storedPrivateKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return 0;
+	}
+
+	unsigned int currentPrivateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	if (storedPrivateKeyHash != currentPrivateKeyHash) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 重新组合密钥
+	int pubKeyLen = strlen((const char*)publicKey);
+	int totalLen = privateKeyLength + pubKeyLen;
+	combinedKey = (unsigned char*)malloc(totalLen + 1);
+	if (!combinedKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return 0;
+	}
+
+	for (int i = 0; i < totalLen; i++) {
+		if (i % 2 == 0) {
+			combinedKey[i] = privateKey[i / 2 % privateKeyLength];
+		}
+		else {
+			combinedKey[i] = publicKey[i / 2 % pubKeyLen];
+		}
+		combinedKey[i] ^= (unsigned char)(i * 7 + 13);
+	}
+	combinedKey[totalLen] = '\0';
+	combinedKeyLength = totalLen;
+
+	// 验证组合密钥长度
+	if (storedCombinedKeyLength != combinedKeyLength) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		return 0;
+	}
+
+	// 验证校验和
+	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	unsigned int storedChecksum;
+	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
+		unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
+		if (storedChecksum == calculatedChecksum) {
+			isValid = true;
+		}
+	}
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	SecureZeroMemory(combinedKey, combinedKeyLength);
+	free(privateKey);
+	free(combinedKey);
+	fclose(inputFile);
+
+	return isValid ? 1 : 0;
 }

@@ -80,4 +80,65 @@ extern "C" {
 
 	// 新增：计算公钥哈希值（内部函数，用于公钥完整性验证）
 	PDUDLL_API unsigned int CalculatePublicKeyHash(const unsigned char* publicKey);
+
+	// ========== 自包含式加密/解密函数（无需预设私钥） ==========
+	
+	// 自包含式文件加密函数（自动生成2048位私钥）
+	// filePath: 输入文件路径
+	// outputPath: 输出文件路径
+	// publicKey: 公钥
+	// progressCallback: 进度回调函数（可为空）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 此函数会自动生成2048位私钥并存储在加密文件中
+	PDUDLL_API int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback = nullptr);
+
+	// 自包含式文件解密函数（从文件中读取私钥）
+	// filePath: 输入加密文件路径
+	// outputPath: 输出文件路径
+	// publicKey: 公钥
+	// progressCallback: 进度回调函数（可为空）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 此函数会从加密文件中读取私钥并验证其完整性
+	PDUDLL_API int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback = nullptr);
+
+	// 自包含式数据加密函数（自动生成2048位私钥）
+	// inputData: 输入数据指针
+	// inputLength: 输入数据长度
+	// publicKey: 公钥
+	// outputData: 输出加密数据指针（由函数分配内存）
+	// outputLength: 输出数据长度（由函数设置）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 调用者需要使用 FreeEncryptedData 释放 outputData 内存
+	PDUDLL_API int SelfContainedEncryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength);
+
+	// 自包含式数据解密函数（从数据中读取私钥）
+	// inputData: 输入加密数据指针
+	// inputLength: 输入数据长度
+	// publicKey: 公钥
+	// outputData: 输出解密数据指针（由函数分配内存）
+	// outputLength: 输出数据长度（由函数设置）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 调用者需要使用 FreeDecryptedData 释放 outputData 内存
+	PDUDLL_API int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, unsigned char** outputData, size_t* outputLength);
+
+	// 验证自包含式加密文件有效性
+	// filePath: 加密文件路径
+	// publicKey: 公钥
+	// 返回值: 1表示有效，0表示无效
+	PDUDLL_API int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicKey);
+
+	// ========== 内部辅助函数 ==========
+	
+	// 生成2048位随机私钥
+	// privateKey: 输出私钥缓冲区（调用者分配，至少256字节）
+	// keyLength: 输出实际密钥长度
+	// 返回值: 0表示成功，负数表示错误码
+	PDUDLL_API int Generate2048BitPrivateKey(unsigned char* privateKey, int* keyLength);
+
+	// 计算私钥哈希值用于完整性验证
+	// privateKey: 私钥数据
+	// keyLength: 私钥长度
+	// 返回值: 私钥哈希值
+	PDUDLL_API unsigned int CalculatePrivateKeyHash(const unsigned char* privateKey, int keyLength);
+
 }
