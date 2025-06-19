@@ -284,12 +284,21 @@ int GetMACAddress(char* macAddr, int maxLen) {
 int GetCPUID(char* cpuId, int maxLen) {
     if (!cpuId || maxLen <= 0) return -1;
 
-    // 使用CPUID指令获取CPU序列号
-    int cpuInfo[4] = { 0 };
-    __cpuid(cpuInfo, 1);
-
-    // 格式化CPU ID
-    sprintf_s(cpuId, maxLen, "%08X-%08X", cpuInfo[3], cpuInfo[0]);
+    // 使用CPUID指令获取稳定的CPU特征值
+    int cpuInfo1[4] = { 0 };  // CPUID(1) - 处理器信息和特征位
+    int cpuInfo0[4] = { 0 };  // CPUID(0) - 厂商信息
+    
+    __cpuid(cpuInfo0, 0);     // 获取厂商ID
+    __cpuid(cpuInfo1, 1);     // 获取处理器签名和特征
+    
+    // 只使用最稳定的CPU特征值，避免不确定因素
+    // 使用: 厂商ID + 处理器签名 + 稳定特征位
+    sprintf_s(cpuId, maxLen, "%08X-%08X-%08X-%08X",
+        cpuInfo0[1],     // 厂商ID前4字节 ("Genu" for Intel, "Auth" for AMD)
+        cpuInfo0[3],     // 厂商ID后4字节 ("ineI" for Intel, "enti" for AMD)
+        cpuInfo1[0],     // 处理器签名(EAX) - 包含型号、家族、步进
+        cpuInfo1[3]);    // 特征标志位(EDX) - 最稳定的特征位
+        
     return 0; // 成功
 }
 
@@ -325,51 +334,43 @@ int GetBIOSID(char* biosId, int maxLen) {
     return -3; // 查询失败
 }
 
-// 生成机器指纹（组合多个硬件ID）
+// 生成机器指纹（基于CPU ID）- 修复稳定性问题
 int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
     if (!fingerprint || maxLen <= 0) return -1;
 
     char cpuId[256] = { 0 };
 
-    // 只获取CPU ID - 最可靠的硬件标识符
+    // 获取CPU ID - 最可靠的硬件标识符
     if (GetCPUID(cpuId, sizeof(cpuId)) != 0 || strlen(cpuId) == 0) {
         return -3; // CPU ID获取失败
     }
 
     // 使用CPU ID生成指纹
-    char combined[512];
+    char combined[512] = { 0 };
     sprintf_s(combined, sizeof(combined), "CPU:%s", cpuId);
 
-    // 使用强哈希算法确保指纹唯一性
-    unsigned long long hash1 = 0x9e3779b97f4a7c15ULL; // 64位哈希种子
-    unsigned long long hash2 = 0x5555555555555555ULL;
+    // 使用简单稳定的哈希算法 - 避免复杂的多重哈希导致不稳定
+    unsigned long long hash = 0x9e3779b97f4a7c15ULL; // 固定种子值
     
-    // 第一轮：DJB2哈希
-    for (int i = 0; combined[i]; i++) {
-        hash1 = ((hash1 << 5) + hash1) + (unsigned char)combined[i];
+    // 单一稳定的哈希算法 - DJB2变种
+    int len = strlen(combined);
+    for (int i = 0; i < len; i++) {
+        hash = ((hash << 5) + hash) + (unsigned char)combined[i];
     }
     
-    // 第二轮：SDBM哈希
-    for (int i = 0; combined[i]; i++) {
-        hash2 = (unsigned char)combined[i] + (hash2 << 6) + (hash2 << 16) - hash2;
-    }
-    
-    // 第三轮：组合哈希并增加随机性
-    unsigned long long finalHash = hash1 ^ hash2;
-    finalHash ^= (finalHash >> 33);
-    finalHash *= 0xff51afd7ed558ccdULL;
-    finalHash ^= (finalHash >> 33);
-    finalHash *= 0xc4ceb9fe1a85ec53ULL;
-    finalHash ^= (finalHash >> 33);
+    // 简单的位操作增强随机性
+    hash ^= (hash >> 32);
+    hash *= 0x9e3779b97f4a7c15ULL;
+    hash ^= (hash >> 32);
 
-    // 生成指纹格式：XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+    // 生成稳定的指纹格式：XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
     sprintf_s(fingerprint, maxLen, "%08X-%04X-%04X-%04X-%08X%04X",
-        (unsigned int)(finalHash & 0xFFFFFFFF),
-        (unsigned short)((finalHash >> 32) & 0xFFFF),
-        (unsigned short)((finalHash >> 48) & 0xFFFF),
-        (unsigned short)((hash1 >> 16) & 0xFFFF),
-        (unsigned int)((hash2 >> 16) & 0xFFFFFFFF),
-        (unsigned short)(hash1 & 0xFFFF));
+        (unsigned int)(hash & 0xFFFFFFFF),
+        (unsigned short)((hash >> 32) & 0xFFFF),
+        (unsigned short)((hash >> 16) & 0xFFFF),
+        (unsigned short)((hash >> 48) & 0xFFFF),
+        (unsigned int)((hash >> 8) & 0xFFFFFFFF),
+        (unsigned short)(hash & 0xFFFF));
 
     return 0; // 成功
 }
