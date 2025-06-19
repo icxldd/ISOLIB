@@ -264,6 +264,48 @@ namespace EncodeLib
         }
 
         /// <summary>
+        /// 加密文件（双密钥系统：直接传入私钥和公钥）
+        /// </summary>
+        /// <param name="inputFilePath">输入文件路径</param>
+        /// <param name="outputFilePath">输出文件路径</param>
+        /// <param name="privateKey">私钥字符串</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <returns>成功返回0，失败返回错误码</returns>
+        public int EncryptFile(string inputFilePath, string outputFilePath, string privateKey, string publicKey, ProgressCallback progressCallback = null)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            try
+            {
+                // 先设置私钥
+                int initResult = InitializePrivateKey(privateKey);
+                if (initResult != 0)
+                {
+                    return initResult; // 返回初始化错误码
+                }
+
+                // 执行加密
+                return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib加密错误: {ex.Message}");
+                return -1; // 返回通用错误码
+            }
+        }
+
+        /// <summary>
         /// 解密文件（双密钥系统：需要预先设置私钥，此处传入公钥）
         /// </summary>
         /// <param name="inputFilePath">输入文件路径</param>
@@ -287,6 +329,48 @@ namespace EncodeLib
 
             try
             {
+                return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib解密错误: {ex.Message}");
+                return -1; // 返回通用错误码
+            }
+        }
+
+        /// <summary>
+        /// 解密文件（双密钥系统：直接传入私钥和公钥）
+        /// </summary>
+        /// <param name="inputFilePath">输入文件路径</param>
+        /// <param name="outputFilePath">输出文件路径</param>
+        /// <param name="privateKey">私钥字符串</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <returns>成功返回0，失败返回错误码</returns>
+        public int DecryptFile(string inputFilePath, string outputFilePath, string privateKey, string publicKey, ProgressCallback progressCallback = null)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            try
+            {
+                // 先设置私钥
+                int initResult = InitializePrivateKey(privateKey);
+                if (initResult != 0)
+                {
+                    return initResult; // 返回初始化错误码
+                }
+
+                // 执行解密
                 return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
@@ -387,6 +471,51 @@ namespace EncodeLib
         }
 
         /// <summary>
+        /// 加密字节数组（双密钥系统：直接传入私钥和公钥）
+        /// </summary>
+        /// <param name="inputData">输入数据字节数组</param>
+        /// <param name="privateKey">私钥字符串</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <returns>成功返回加密后的字节数组，失败抛出异常</returns>
+        public byte[] EncryptData(byte[] inputData, string privateKey, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (inputData == null || inputData.Length == 0)
+            {
+                throw new ArgumentException("输入数据不能为空", nameof(inputData));
+            }
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            try
+            {
+                // 先设置私钥
+                int initResult = InitializePrivateKey(privateKey);
+                if (initResult != 0)
+                {
+                    throw new InvalidOperationException($"初始化私钥失败，错误码: {initResult} ({GetErrorMessage(initResult)})");
+                }
+
+                // 执行加密（调用原有的方法）
+                return EncryptData(inputData, publicKey);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib字节数组加密错误: {ex.Message}");
+                throw new InvalidOperationException($"字节数组加密失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// 解密字节数组（双密钥系统：需要预先设置私钥，此处传入公钥）
         /// </summary>
         /// <param name="encryptedData">加密数据字节数组</param>
@@ -471,6 +600,51 @@ namespace EncodeLib
                         System.Diagnostics.Debug.WriteLine($"释放解密数据内存失败: {ex.Message}");
                     }
                 }
+            }
+        }
+
+        /// <summary>
+        /// 解密字节数组（双密钥系统：直接传入私钥和公钥）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="privateKey">私钥字符串</param>
+        /// <param name="publicKey">公钥字符串（与私钥组合使用）</param>
+        /// <returns>成功返回解密后的字节数组，失败抛出异常</returns>
+        public byte[] DecryptData(byte[] encryptedData, string privateKey, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            try
+            {
+                // 先设置私钥
+                int initResult = InitializePrivateKey(privateKey);
+                if (initResult != 0)
+                {
+                    throw new InvalidOperationException($"初始化私钥失败，错误码: {initResult} ({GetErrorMessage(initResult)})");
+                }
+
+                // 执行解密（调用原有的方法）
+                return DecryptData(encryptedData, publicKey);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib字节数组解密错误: {ex.Message}");
+                throw new InvalidOperationException($"字节数组解密失败: {ex.Message}", ex);
             }
         }
 
