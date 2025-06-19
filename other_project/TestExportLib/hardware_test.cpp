@@ -89,6 +89,17 @@ int main() {
     }
     printf("\n");
 
+    // 8b. 生成机器指纹（C#友好版本）
+    printf("8b. 机器指纹（C#友好版本）:\n");
+    char fingerprintBuffer[256] = {0};
+    result = GetMachineFingerprint(fingerprintBuffer);
+    if (result == 0) {
+        printf("   成功: %s\n", fingerprintBuffer);
+    } else {
+        printf("   失败: 错误码 %d\n", result);
+    }
+    printf("\n");
+
     // 9. 获取完整硬件信息
     printf("9. 完整硬件信息:\n");
     char info[2048];

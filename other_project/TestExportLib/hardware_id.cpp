@@ -163,7 +163,7 @@ bool GetWMIStringValue(IWbemServices* pSvc, const wchar_t* query, const wchar_t*
 }
 
 // 获取Windows产品ID
-extern "C" __declspec(dllexport) int GetWindowsID(char* windowsId, int maxLen) {
+ int GetWindowsID(char* windowsId, int maxLen) {
     if (!windowsId || maxLen <= 0) return -1;
 
     WMIHelper wmi;
@@ -179,7 +179,7 @@ extern "C" __declspec(dllexport) int GetWindowsID(char* windowsId, int maxLen) {
 }
 
 // 获取硬盘序列号
-extern "C" __declspec(dllexport) int GetHardDiskID(char* diskId, int maxLen) {
+ int GetHardDiskID(char* diskId, int maxLen) {
     if (!diskId || maxLen <= 0) return -1;
 
     WMIHelper wmi;
@@ -205,7 +205,7 @@ extern "C" __declspec(dllexport) int GetHardDiskID(char* diskId, int maxLen) {
 }
 
 // 获取网卡MAC地址
-extern "C" __declspec(dllexport) int GetMACAddress(char* macAddr, int maxLen) {
+int GetMACAddress(char* macAddr, int maxLen) {
     if (!macAddr || maxLen <= 0) return -1;
 
     ULONG outBufLen = sizeof(IP_ADAPTER_INFO);
@@ -241,7 +241,7 @@ extern "C" __declspec(dllexport) int GetMACAddress(char* macAddr, int maxLen) {
 }
 
 // 获取主板序列号
-extern "C" __declspec(dllexport) int GetMotherboardID(char* motherboardId, int maxLen) {
+ int GetMotherboardID(char* motherboardId, int maxLen) {
     if (!motherboardId || maxLen <= 0) return -1;
 
     WMIHelper wmi;
@@ -257,7 +257,7 @@ extern "C" __declspec(dllexport) int GetMotherboardID(char* motherboardId, int m
 }
 
 // 获取CPU ID
-extern "C" __declspec(dllexport) int GetCPUID(char* cpuId, int maxLen) {
+int GetCPUID(char* cpuId, int maxLen) {
     if (!cpuId || maxLen <= 0) return -1;
 
     // 使用CPUID指令获取CPU序列号
@@ -270,7 +270,7 @@ extern "C" __declspec(dllexport) int GetCPUID(char* cpuId, int maxLen) {
 }
 
 // 获取BIOS序列号
-extern "C" __declspec(dllexport) int GetBIOSID(char* biosId, int maxLen) {
+int GetBIOSID(char* biosId, int maxLen) {
     if (!biosId || maxLen <= 0) return -1;
 
     WMIHelper wmi;
@@ -286,7 +286,7 @@ extern "C" __declspec(dllexport) int GetBIOSID(char* biosId, int maxLen) {
 }
 
 // 获取系统UUID
-extern "C" __declspec(dllexport) int GetSystemUUID(char* systemUuid, int maxLen) {
+ int GetSystemUUID(char* systemUuid, int maxLen) {
     if (!systemUuid || maxLen <= 0) return -1;
 
     WMIHelper wmi;
@@ -302,7 +302,7 @@ extern "C" __declspec(dllexport) int GetSystemUUID(char* systemUuid, int maxLen)
 }
 
 // 生成机器指纹（组合多个硬件ID）
-extern "C" __declspec(dllexport) int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
+int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
     if (!fingerprint || maxLen <= 0) return -1;
 
     char windowsId[256] = { 0 };
@@ -339,7 +339,7 @@ extern "C" __declspec(dllexport) int GenerateMachineFingerprint(char* fingerprin
 }
 
 // 获取详细硬件信息
-extern "C" __declspec(dllexport) int GetHardwareInfo(char* info, int maxLen) {
+int GetHardwareInfo(char* info, int maxLen) {
     if (!info || maxLen <= 0) return -1;
 
     char windowsId[256] = { 0 };
@@ -377,4 +377,23 @@ extern "C" __declspec(dllexport) int GetHardwareInfo(char* info, int maxLen) {
         systemUuid[0] ? systemUuid : "N/A");
 
     return 0; // 成功
+}
+
+// 生成机器指纹（C#友好版本）- 无需长度参数
+extern "C" __declspec(dllexport) int GetMachineFingerprint(const char* data) {
+    if (!data) return -1;
+
+    // 更安全的方式：先在栈上生成指纹，再复制到输出缓冲区
+    char tempBuffer[256] = {0};
+    
+    // 调用现有的GenerateMachineFingerprint函数
+    int result = GenerateMachineFingerprint(tempBuffer, sizeof(tempBuffer));
+    
+    if (result == 0) {
+        // 成功生成指纹，复制到输出缓冲区
+        // 注意：这里假设C#传递的缓冲区至少有256字节
+        strcpy_s(const_cast<char*>(data), 256, tempBuffer);
+    }
+    
+    return result;
 } 
