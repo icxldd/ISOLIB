@@ -518,6 +518,337 @@ namespace EncodeLib
             }
         }
 
+        // ========== 自包含式加密/解密函数（无需预设私钥） ==========
+
+        /// <summary>
+        /// 自包含式文件加密函数（自动生成2048位私钥）
+        /// </summary>
+        /// <param name="inputFilePath">输入文件路径</param>
+        /// <param name="outputFilePath">输出文件路径</param>
+        /// <param name="publicKey">公钥字符串</param>
+        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <returns>成功返回0，失败返回错误码</returns>
+        /// <remarks>
+        /// 此函数会自动生成2048位私钥并存储在加密文件中，无需预设私钥。
+        /// 与传统的双密钥系统不同，这是一个完全独立的加密系统。
+        /// </remarks>
+        public int SelfContainedEncryptFile(string inputFilePath, string outputFilePath, string publicKey, ProgressCallback progressCallback = null)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(inputFilePath))
+            {
+                throw new ArgumentException("输入文件路径不能为空", nameof(inputFilePath));
+            }
+
+            if (string.IsNullOrEmpty(outputFilePath))
+            {
+                throw new ArgumentException("输出文件路径不能为空", nameof(outputFilePath));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            if (!File.Exists(inputFilePath))
+            {
+                throw new FileNotFoundException($"输入文件不存在: {inputFilePath}");
+            }
+
+            try
+            {
+                return dllManager.SelfContainedEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib自包含式加密错误: {ex.Message}");
+                return -1; // 返回通用错误码
+            }
+        }
+
+        /// <summary>
+        /// 自包含式文件解密函数（从文件中读取私钥）
+        /// </summary>
+        /// <param name="inputFilePath">输入加密文件路径</param>
+        /// <param name="outputFilePath">输出文件路径</param>
+        /// <param name="publicKey">公钥字符串</param>
+        /// <param name="progressCallback">进度回调函数（可选）</param>
+        /// <returns>成功返回0，失败返回错误码</returns>
+        /// <remarks>
+        /// 此函数会从加密文件中读取私钥并验证其完整性，然后进行解密。
+        /// 如果私钥被篡改，解密将失败。
+        /// </remarks>
+        public int SelfContainedDecryptFile(string inputFilePath, string outputFilePath, string publicKey, ProgressCallback progressCallback = null)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(inputFilePath))
+            {
+                throw new ArgumentException("输入文件路径不能为空", nameof(inputFilePath));
+            }
+
+            if (string.IsNullOrEmpty(outputFilePath))
+            {
+                throw new ArgumentException("输出文件路径不能为空", nameof(outputFilePath));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            if (!File.Exists(inputFilePath))
+            {
+                throw new FileNotFoundException($"输入文件不存在: {inputFilePath}");
+            }
+
+            try
+            {
+                return dllManager.SelfContainedDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib自包含式解密错误: {ex.Message}");
+                return -1; // 返回通用错误码
+            }
+        }
+
+        /// <summary>
+        /// 自包含式数据加密函数（自动生成2048位私钥）
+        /// </summary>
+        /// <param name="inputData">输入数据字节数组</param>
+        /// <param name="publicKey">公钥字符串</param>
+        /// <returns>成功返回加密后的字节数组，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数会自动生成2048位私钥并包含在加密数据中，无需预设私钥。
+        /// 返回的数据包含完整的加密信息，可直接用于存储或传输。
+        /// </remarks>
+        public byte[] SelfContainedEncryptData(byte[] inputData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (inputData == null || inputData.Length == 0)
+            {
+                throw new ArgumentException("输入数据不能为空", nameof(inputData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+            IntPtr outputPtr = IntPtr.Zero;
+            byte[] result = null;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(inputData.Length);
+                Marshal.Copy(inputData, 0, inputPtr, inputData.Length);
+
+                // 调用DLL函数
+                UIntPtr outputLength;
+                int errorCode = dllManager.SelfContainedEncryptData(
+                    inputPtr,
+                    new UIntPtr((uint)inputData.Length),
+                    publicKey,
+                    out outputPtr,
+                    out outputLength);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"自包含式加密失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (outputPtr == IntPtr.Zero || outputLength.ToUInt32() == 0)
+                {
+                    throw new InvalidOperationException("自包含式加密返回空数据");
+                }
+
+                // 立即复制到C#字节数组
+                int length = (int)outputLength.ToUInt32();
+                result = new byte[length];
+                Marshal.Copy(outputPtr, result, 0, length);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib自包含式字节数组加密错误: {ex.Message}");
+                throw new InvalidOperationException($"自包含式字节数组加密失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 立即释放所有分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+
+                if (outputPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeEncryptedData(outputPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放自包含式加密数据内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 自包含式数据解密函数（从数据中读取私钥）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串</param>
+        /// <returns>成功返回解密后的字节数组，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数会从加密数据中读取私钥并验证其完整性，然后进行解密。
+        /// 如果私钥被篡改，解密将失败。
+        /// </remarks>
+        public byte[] SelfContainedDecryptData(byte[] encryptedData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+            IntPtr outputPtr = IntPtr.Zero;
+            byte[] result = null;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(encryptedData.Length);
+                Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
+
+                // 调用DLL函数
+                UIntPtr outputLength;
+                int errorCode = dllManager.SelfContainedDecryptData(
+                    inputPtr,
+                    new UIntPtr((uint)encryptedData.Length),
+                    publicKey,
+                    out outputPtr,
+                    out outputLength);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"自包含式解密失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (outputPtr == IntPtr.Zero || outputLength.ToUInt32() == 0)
+                {
+                    throw new InvalidOperationException("自包含式解密返回空数据");
+                }
+
+                // 立即复制到C#字节数组
+                int length = (int)outputLength.ToUInt32();
+                result = new byte[length];
+                Marshal.Copy(outputPtr, result, 0, length);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib自包含式字节数组解密错误: {ex.Message}");
+                throw new InvalidOperationException($"自包含式字节数组解密失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 立即释放所有分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+
+                if (outputPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeDecryptedData(outputPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放自包含式解密数据内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+
+        /// <summary>
+        /// 生成2048位随机私钥（辅助函数）
+        /// </summary>
+        /// <returns>成功返回私钥字节数组，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数用于生成高质量的2048位随机私钥，主要用于测试和调试目的。
+        /// 在正常使用中，私钥由加密函数自动生成。
+        /// </remarks>
+        public byte[] Generate2048BitPrivateKey()
+        {
+            CheckDllLoaded();
+
+            IntPtr privateKeyPtr = IntPtr.Zero;
+            byte[] result = null;
+
+            try
+            {
+                // 分配256字节缓冲区用于2048位私钥
+                const int PRIVATE_KEY_SIZE = 256;
+                privateKeyPtr = Marshal.AllocHGlobal(PRIVATE_KEY_SIZE);
+
+                int keyLength;
+                int errorCode = dllManager.Generate2048BitPrivateKey(privateKeyPtr, out keyLength);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"生成私钥失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (keyLength <= 0 || keyLength > PRIVATE_KEY_SIZE)
+                {
+                    throw new InvalidOperationException($"私钥长度无效: {keyLength}");
+                }
+
+                // 复制私钥到C#字节数组
+                result = new byte[keyLength];
+                Marshal.Copy(privateKeyPtr, result, 0, keyLength);
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib生成私钥错误: {ex.Message}");
+                throw new InvalidOperationException($"生成2048位私钥失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 安全清理私钥内存
+                if (privateKeyPtr != IntPtr.Zero)
+                {
+                    // 清零内存后释放
+                    for (int i = 0; i < 256; i++)
+                    {
+                        Marshal.WriteByte(privateKeyPtr, i, 0);
+                    }
+                    Marshal.FreeHGlobal(privateKeyPtr);
+                }
+            }
+        }
+
         /// <summary>
         /// 检查DLL是否已加载的辅助方法
         /// </summary>

@@ -95,6 +95,53 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void FreeDecryptedDataDelegate(IntPtr data);
 
+        // ========== 自包含式加密/解密函数委托（无需预设私钥） ==========
+        
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedEncryptFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            ProgressCallback progressCallback);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedDecryptFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            ProgressCallback progressCallback);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedEncryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedDecryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ValidateSelfContainedFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int Generate2048BitPrivateKeyDelegate(
+            IntPtr privateKey,
+            out int keyLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate uint CalculatePrivateKeyHashDelegate(
+            IntPtr privateKey,
+            int keyLength);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -110,6 +157,13 @@ namespace EncodeLib
         public StreamDecryptDataDelegate StreamDecryptData { get; private set; }
         public FreeEncryptedDataDelegate FreeEncryptedData { get; private set; }
         public FreeDecryptedDataDelegate FreeDecryptedData { get; private set; }
+
+        // ========== 自包含式加密/解密函数实例（无需预设私钥） ==========
+        public SelfContainedEncryptFileDelegate SelfContainedEncryptFile { get; private set; }
+        public SelfContainedDecryptFileDelegate SelfContainedDecryptFile { get; private set; }
+        public SelfContainedEncryptDataDelegate SelfContainedEncryptData { get; private set; }
+        public SelfContainedDecryptDataDelegate SelfContainedDecryptData { get; private set; }
+        public Generate2048BitPrivateKeyDelegate Generate2048BitPrivateKey { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL
@@ -178,6 +232,13 @@ namespace EncodeLib
                 StreamDecryptData = GetDelegateFromFuncName<StreamDecryptDataDelegate>("StreamDecryptData");
                 FreeEncryptedData = GetDelegateFromFuncName<FreeEncryptedDataDelegate>("FreeEncryptedData");
                 FreeDecryptedData = GetDelegateFromFuncName<FreeDecryptedDataDelegate>("FreeDecryptedData");
+
+                // ========== 自包含式加密/解密函数实例（无需预设私钥） ==========
+                SelfContainedEncryptFile = GetDelegateFromFuncName<SelfContainedEncryptFileDelegate>("SelfContainedEncryptFile");
+                SelfContainedDecryptFile = GetDelegateFromFuncName<SelfContainedDecryptFileDelegate>("SelfContainedDecryptFile");
+                SelfContainedEncryptData = GetDelegateFromFuncName<SelfContainedEncryptDataDelegate>("SelfContainedEncryptData");
+                SelfContainedDecryptData = GetDelegateFromFuncName<SelfContainedDecryptDataDelegate>("SelfContainedDecryptData");
+                Generate2048BitPrivateKey = GetDelegateFromFuncName<Generate2048BitPrivateKeyDelegate>("Generate2048BitPrivateKey");
             }
             catch (EntryPointNotFoundException ex)
             {
