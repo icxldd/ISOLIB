@@ -130,9 +130,6 @@ namespace EncodeLib
         {
             // 可能的DLL文件名
             string[] dllNames = {
-                "TestExportLib.dll",
-                "ExportLib.dll",
-                "TestExportLib.vmp.dll",
                 "ExportLib.vmp.dll"
             };
 
