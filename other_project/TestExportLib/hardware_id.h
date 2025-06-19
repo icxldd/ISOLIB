@@ -78,6 +78,15 @@ int GenerateMachineFingerprint(char* fingerprint, int maxLen);
 __declspec(dllexport) int GetMachineFingerprint(const char* data);
 
 /// <summary>
+/// 生成机器指纹（调试版本）- 显示详细硬件信息获取状态
+/// </summary>
+/// <param name="fingerprint">输出指纹缓冲区</param>
+/// <param name="debugInfo">输出调试信息缓冲区</param>
+/// <param name="maxLen">缓冲区最大长度</param>
+/// <returns>0=成功, -1=参数错误, -3=硬件ID获取不足</returns>
+__declspec(dllexport) int GetMachineFingerprintDebug(const char* fingerprint, const char* debugInfo, int maxLen);
+
+/// <summary>
 /// 获取详细硬件信息
 /// </summary>
 /// <param name="info">输出缓冲区</param>

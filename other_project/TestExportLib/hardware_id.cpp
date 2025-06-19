@@ -221,23 +221,47 @@ int GetMACAddress(char* macAddr, int maxLen) {
 
     DWORD dwRetVal = GetAdaptersInfo(pAdapterInfo, &outBufLen);
     if (dwRetVal == NO_ERROR) {
+        char bestMac[64] = {0};
+        bool foundMac = false;
+        
         PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
         while (pAdapter) {
-            // 跳过回环接口和非以太网接口
+            // 接受任何以太网或WiFi网卡，包括虚拟网卡
             if (pAdapter->Type == MIB_IF_TYPE_ETHERNET || pAdapter->Type == IF_TYPE_IEEE80211) {
-                sprintf_s(macAddr, maxLen, "%02X-%02X-%02X-%02X-%02X-%02X",
+                char tempMac[64];
+                sprintf_s(tempMac, sizeof(tempMac), "%02X-%02X-%02X-%02X-%02X-%02X",
                     pAdapter->Address[0], pAdapter->Address[1],
                     pAdapter->Address[2], pAdapter->Address[3],
                     pAdapter->Address[4], pAdapter->Address[5]);
-                free(pAdapterInfo);
-                return 0; // 成功
+                
+                // 只跳过全零MAC地址
+                if (strncmp(tempMac, "00-00-00-00-00-00", 17) != 0) {
+                    strcpy_s(bestMac, sizeof(bestMac), tempMac);
+                    foundMac = true;
+                    
+                    // 如果找到物理网卡（非虚拟），优先使用
+                    if (pAdapter->Type == MIB_IF_TYPE_ETHERNET &&
+                        strncmp(tempMac, "00-50-56", 8) != 0 && 
+                        strncmp(tempMac, "08-00-27", 8) != 0) {
+                        strcpy_s(macAddr, maxLen, tempMac);
+                        free(pAdapterInfo);
+                        return 0; // 找到物理网卡，直接返回
+                    }
+                }
             }
             pAdapter = pAdapter->Next;
+        }
+        
+        // 如果没找到物理网卡，使用任何可用的MAC地址
+        if (foundMac) {
+            strcpy_s(macAddr, maxLen, bestMac);
+            free(pAdapterInfo);
+            return 0;
         }
     }
 
     free(pAdapterInfo);
-    return -3; // 未找到合适的网卡
+    return -3; // 未找到任何网卡
 }
 
 // 获取主板序列号
@@ -305,35 +329,47 @@ int GetBIOSID(char* biosId, int maxLen) {
 int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
     if (!fingerprint || maxLen <= 0) return -1;
 
-    char windowsId[256] = { 0 };
-    char diskId[256] = { 0 };
-    char macAddr[256] = { 0 };
-    char motherboardId[256] = { 0 };
     char cpuId[256] = { 0 };
-    char biosId[256] = { 0 };
 
-    // 获取各种硬件ID
-    GetWindowsID(windowsId, sizeof(windowsId));
-    GetHardDiskID(diskId, sizeof(diskId));
-    GetMACAddress(macAddr, sizeof(macAddr));
-    GetMotherboardID(motherboardId, sizeof(motherboardId));
-    GetCPUID(cpuId, sizeof(cpuId));
-    GetBIOSID(biosId, sizeof(biosId));
-
-    // 组合生成指纹
-    char combined[2048];
-    sprintf_s(combined, sizeof(combined), "%s|%s|%s|%s|%s|%s",
-        windowsId, diskId, macAddr, motherboardId, cpuId, biosId);
-
-    // 计算简单哈希
-    unsigned int hash = 0;
-    for (int i = 0; combined[i]; i++) {
-        hash = hash * 31 + (unsigned char)combined[i];
+    // 只获取CPU ID - 最可靠的硬件标识符
+    if (GetCPUID(cpuId, sizeof(cpuId)) != 0 || strlen(cpuId) == 0) {
+        return -3; // CPU ID获取失败
     }
 
-    // 格式化指纹
-    sprintf_s(fingerprint, maxLen, "%08X-%04X-%04X",
-        hash, (hash >> 16) & 0xFFFF, hash & 0xFFFF);
+    // 使用CPU ID生成指纹
+    char combined[512];
+    sprintf_s(combined, sizeof(combined), "CPU:%s", cpuId);
+
+    // 使用强哈希算法确保指纹唯一性
+    unsigned long long hash1 = 0x9e3779b97f4a7c15ULL; // 64位哈希种子
+    unsigned long long hash2 = 0x5555555555555555ULL;
+    
+    // 第一轮：DJB2哈希
+    for (int i = 0; combined[i]; i++) {
+        hash1 = ((hash1 << 5) + hash1) + (unsigned char)combined[i];
+    }
+    
+    // 第二轮：SDBM哈希
+    for (int i = 0; combined[i]; i++) {
+        hash2 = (unsigned char)combined[i] + (hash2 << 6) + (hash2 << 16) - hash2;
+    }
+    
+    // 第三轮：组合哈希并增加随机性
+    unsigned long long finalHash = hash1 ^ hash2;
+    finalHash ^= (finalHash >> 33);
+    finalHash *= 0xff51afd7ed558ccdULL;
+    finalHash ^= (finalHash >> 33);
+    finalHash *= 0xc4ceb9fe1a85ec53ULL;
+    finalHash ^= (finalHash >> 33);
+
+    // 生成指纹格式：XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+    sprintf_s(fingerprint, maxLen, "%08X-%04X-%04X-%04X-%08X%04X",
+        (unsigned int)(finalHash & 0xFFFFFFFF),
+        (unsigned short)((finalHash >> 32) & 0xFFFF),
+        (unsigned short)((finalHash >> 48) & 0xFFFF),
+        (unsigned short)((hash1 >> 16) & 0xFFFF),
+        (unsigned int)((hash2 >> 16) & 0xFFFFFFFF),
+        (unsigned short)(hash1 & 0xFFFF));
 
     return 0; // 成功
 }
@@ -393,6 +429,41 @@ extern "C" __declspec(dllexport) int GetMachineFingerprint(const char* data) {
         // 成功生成指纹，复制到输出缓冲区
         // 注意：这里假设C#传递的缓冲区至少有256字节
         strcpy_s(const_cast<char*>(data), 256, tempBuffer);
+    }
+    
+    return result;
+}
+
+// 生成机器指纹（调试版本）- 显示详细硬件信息获取状态
+extern "C" __declspec(dllexport) int GetMachineFingerprintDebug(const char* fingerprint, const char* debugInfo, int maxLen) {
+    if (!fingerprint || !debugInfo || maxLen <= 0) return -1;
+
+    char cpuId[256] = { 0 };
+    char debug[1024] = { 0 };
+
+    // 只检查CPU ID获取状态
+    int cpuResult = GetCPUID(cpuId, sizeof(cpuId));
+    if (cpuResult == 0 && strlen(cpuId) > 0) {
+        sprintf_s(debug, sizeof(debug), "CPU ID: OK (%s)\nStatus: SUCCESS - Device fingerprint generated based on CPU ID", cpuId);
+    } else {
+        sprintf_s(debug, sizeof(debug), "CPU ID: FAILED (code: %d)\nStatus: ERROR - Cannot generate device fingerprint", cpuResult);
+    }
+
+    // 复制调试信息
+    strcpy_s(const_cast<char*>(debugInfo), maxLen, debug);
+
+    // 生成指纹
+    if (cpuResult != 0 || strlen(cpuId) == 0) {
+        strcpy_s(const_cast<char*>(fingerprint), maxLen, "ERROR-NO-CPU-ID");
+        return -3;
+    }
+
+    // 调用原始指纹生成逻辑
+    char tempFingerprint[256] = {0};
+    int result = GenerateMachineFingerprint(tempFingerprint, sizeof(tempFingerprint));
+    
+    if (result == 0) {
+        strcpy_s(const_cast<char*>(fingerprint), maxLen, tempFingerprint);
     }
     
     return result;
