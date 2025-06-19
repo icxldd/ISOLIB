@@ -30,6 +30,9 @@
     <ClInclude Include="ntp.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="hardware_id.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -45,6 +48,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ntp.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="hardware_id.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

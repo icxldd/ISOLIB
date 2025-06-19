@@ -105,6 +105,8 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1636,5): warning C427
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(128,17):
       参见“ValidateSelfContainedFile”的前一个定义
   
+  hardware_id.cpp
+D:\work\code\ISOLib\other_project\TestExportLib\hardware_id.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   ntp.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
 D:\work\code\ISOLib\other_project\TestExportLib\ntp.h(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失

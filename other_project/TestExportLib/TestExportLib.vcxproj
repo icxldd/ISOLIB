@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClInclude Include="encode.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="hardware_id.h" />
     <ClInclude Include="ntp.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="Pduapi.h" />
@@ -158,6 +159,7 @@
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="encode.cpp" />
+    <ClCompile Include="hardware_id.cpp" />
     <ClCompile Include="ntp.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
