@@ -851,6 +851,26 @@ namespace TestWin
                 MessageBox.Show($"数据解密失败: {ex.Message}", "解密失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        /// <summary>
+        /// 打开自包含式加密测试界面
+        /// </summary>
+        private void button8_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                // 创建并显示Form2自包含式加密测试界面
+                Form2 selfContainedTestForm = new Form2();
+                selfContainedTestForm.Show(); // 使用Show()而非ShowDialog()，这样可以同时打开多个窗口
+                
+                // 在日志中记录
+                richTextBox1.AppendText($"[{DateTime.Now:HH:mm:ss}] 已打开自包含式加密测试界面\r\n");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"打开自包含式加密测试界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
     }
 
     public static class StructBaseExtensions
