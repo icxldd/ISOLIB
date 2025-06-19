@@ -495,5 +495,11 @@ namespace TestWin
             return $"{len:0.##} {sizes[order]}";
         }
 
+        private void button1_Click(object sender, EventArgs e)
+        {
+            string dd = EncodeLibManager.Instance.GetMachineFingerprint();
+
+            AppendLog(dd);
+        }
     }
 }

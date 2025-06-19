@@ -142,6 +142,11 @@ namespace EncodeLib
             IntPtr privateKey,
             int keyLength);
 
+        // 硬件ID获取函数委托
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetMachineFingerprintDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] System.Text.StringBuilder data);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -164,6 +169,9 @@ namespace EncodeLib
         public SelfContainedEncryptDataDelegate SelfContainedEncryptData { get; private set; }
         public SelfContainedDecryptDataDelegate SelfContainedDecryptData { get; private set; }
         public Generate2048BitPrivateKeyDelegate Generate2048BitPrivateKey { get; private set; }
+
+        // 硬件ID获取函数实例
+        public GetMachineFingerprintDelegate GetMachineFingerprint { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL
@@ -239,6 +247,9 @@ namespace EncodeLib
                 SelfContainedEncryptData = GetDelegateFromFuncName<SelfContainedEncryptDataDelegate>("SelfContainedEncryptData");
                 SelfContainedDecryptData = GetDelegateFromFuncName<SelfContainedDecryptDataDelegate>("SelfContainedDecryptData");
                 Generate2048BitPrivateKey = GetDelegateFromFuncName<Generate2048BitPrivateKeyDelegate>("Generate2048BitPrivateKey");
+
+                // 硬件ID获取函数实例
+                GetMachineFingerprint = GetDelegateFromFuncName<GetMachineFingerprintDelegate>("GetMachineFingerprint");
             }
             catch (EntryPointNotFoundException ex)
             {

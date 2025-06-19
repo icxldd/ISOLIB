@@ -788,7 +788,6 @@ namespace EncodeLib
             }
         }
 
-
         /// <summary>
         /// 生成2048位随机私钥（辅助函数）
         /// </summary>
@@ -846,6 +845,75 @@ namespace EncodeLib
                     }
                     Marshal.FreeHGlobal(privateKeyPtr);
                 }
+            }
+        }
+
+        // ========== 硬件ID获取函数 ==========
+
+        /// <summary>
+        /// 获取机器指纹（硬件ID组合哈希）
+        /// </summary>
+        /// <returns>成功返回机器指纹字符串，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数会获取多个硬件标识符（Windows产品ID、硬盘序列号、MAC地址、主板序列号、CPU ID、BIOS序列号）
+        /// 并将它们组合生成一个唯一的机器指纹。该指纹可用于硬件锁定、许可验证等用途。
+        /// 指纹格式：XXXXXXXX-XXXX-XXXX（基于硬件ID的哈希值）
+        /// </remarks>
+        public string GetMachineFingerprint()
+        {
+            CheckDllLoaded();
+
+            try
+            {
+                // 创建256字节的StringBuilder用于接收机器指纹
+                System.Text.StringBuilder fingerprint = new System.Text.StringBuilder(256);
+
+                // 调用DLL函数获取机器指纹
+                int errorCode = dllManager.GetMachineFingerprint(fingerprint);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取机器指纹失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                string result = fingerprint.ToString().Trim();
+                
+                if (string.IsNullOrEmpty(result))
+                {
+                    throw new InvalidOperationException("获取的机器指纹为空");
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取机器指纹错误: {ex.Message}");
+                throw new InvalidOperationException($"获取机器指纹失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 获取机器指纹（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="fingerprint">输出机器指纹字符串</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是GetMachineFingerprint的安全版本，不会抛出异常，而是通过返回值指示操作结果。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryGetMachineFingerprint(out string fingerprint)
+        {
+            fingerprint = string.Empty;
+
+            try
+            {
+                fingerprint = GetMachineFingerprint();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取机器指纹失败: {ex.Message}");
+                return false;
             }
         }
 

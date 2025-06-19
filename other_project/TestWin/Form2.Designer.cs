@@ -28,7 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
             this.textBox1 = new System.Windows.Forms.TextBox();
             this.textBox2 = new System.Windows.Forms.TextBox();
             this.label1 = new System.Windows.Forms.Label();
@@ -45,6 +44,7 @@
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.label3 = new System.Windows.Forms.Label();
             this.btnClearLog = new System.Windows.Forms.Button();
+            this.button1 = new System.Windows.Forms.Button();
             this.groupBox1.SuspendLayout();
             this.groupBox2.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -79,7 +79,7 @@
             this.label2.AutoSize = true;
             this.label2.Location = new System.Drawing.Point(25, 68);
             this.label2.Name = "label2";
-            this.label2.Size = new System.Drawing.Size(89, 12);
+            this.label2.Size = new System.Drawing.Size(101, 12);
             this.label2.TabIndex = 3;
             this.label2.Text = "公钥(PublicKey):";
             // 
@@ -193,7 +193,7 @@
             this.label3.ForeColor = System.Drawing.Color.DarkBlue;
             this.label3.Location = new System.Drawing.Point(25, 10);
             this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(252, 22);
+            this.label3.Size = new System.Drawing.Size(283, 22);
             this.label3.TabIndex = 14;
             this.label3.Text = "自包含式加密系统测试 (无需预设私钥)";
             // 
@@ -207,11 +207,22 @@
             this.btnClearLog.UseVisualStyleBackColor = true;
             this.btnClearLog.Click += new System.EventHandler(this.btnClearLog_Click);
             // 
+            // button1
+            // 
+            this.button1.Location = new System.Drawing.Point(538, 230);
+            this.button1.Name = "button1";
+            this.button1.Size = new System.Drawing.Size(75, 23);
+            this.button1.TabIndex = 16;
+            this.button1.Text = "获取设备指纹";
+            this.button1.UseVisualStyleBackColor = true;
+            this.button1.Click += new System.EventHandler(this.button1_Click);
+            // 
             // Form2
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(884, 481);
+            this.Controls.Add(this.button1);
             this.Controls.Add(this.btnClearLog);
             this.Controls.Add(this.label3);
             this.Controls.Add(this.groupBox3);
@@ -252,5 +263,6 @@
         private System.Windows.Forms.GroupBox groupBox3;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.Button btnClearLog;
+        private System.Windows.Forms.Button button1;
     }
 }
