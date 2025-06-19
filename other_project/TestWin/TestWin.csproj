@@ -89,10 +89,6 @@
     <None Include="App.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\ISOLib.csproj">
-      <Project>{e9f9b3b7-c038-44fd-bf03-53887366f97d}</Project>
-      <Name>ISOLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\EncodeLib\EncodeLib.csproj">
       <Project>{0129a9f9-6adf-423c-984a-8961e78a63a8}</Project>
       <Name>EncodeLib</Name>
