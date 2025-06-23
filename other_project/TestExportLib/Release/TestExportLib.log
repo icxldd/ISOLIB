@@ -69,12 +69,12 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(884,1): warning C4819
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(889,5): warning C4273: “Generate2048BitPrivateKey”: dll 链接不一致
   (编译源文件“/encode.cpp”)
-      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(136,17):
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(155,17):
       参见“Generate2048BitPrivateKey”的前一个定义
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(913,14): warning C4273: “CalculatePrivateKeyHash”: dll 链接不一致
   (编译源文件“/encode.cpp”)
-      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(142,26):
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(161,26):
       参见“CalculatePrivateKeyHash”的前一个定义
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(938,5): warning C4273: “SelfContainedEncryptFile”: dll 链接不一致
@@ -105,6 +105,19 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1636,5): warning C427
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(128,17):
       参见“ValidateSelfContainedFile”的前一个定义
   
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1784,5): warning C4273: “ExtractPrivateKeyFromFile”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(138,17):
+      参见“ExtractPrivateKeyFromFile”的前一个定义
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1870,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+  (编译源文件“/encode.cpp”)
+  
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1900,5): warning C4273: “ExtractPrivateKeyFromData”: dll 链接不一致
+  (编译源文件“/encode.cpp”)
+      D:\work\code\ISOLib\other_project\TestExportLib\encode.h(147,17):
+      参见“ExtractPrivateKeyFromData”的前一个定义
+  
   hardware_id.cpp
 D:\work\code\ISOLib\other_project\TestExportLib\hardware_id.cpp(1,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   ntp.cpp
@@ -126,7 +139,7 @@ D:\work\code\ISOLib\other_project\TestExportLib\ntp.cpp(277,13): warning C4273: 
     正在创建库 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.lib 和对象 D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.exp
   正在生成代码
   Previous IPDB not found, fall back to full compilation.
-  All 35 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  All 37 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
   已完成代码的生成
   TestExportLib.vcxproj -> D:\work\code\ISOLib\other_project\TestWin\bin\Debug\ExportLib.dll
   'pwsh.exe' 不是内部或外部命令，也不是可运行的程序

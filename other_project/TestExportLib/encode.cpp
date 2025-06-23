@@ -1777,3 +1777,215 @@ int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicK
 
 	return isValid ? 1 : 0;
 }
+
+// ========== 私钥提取函数实现 ==========
+
+// 从自包含式加密文件中提取私钥
+int ExtractPrivateKeyFromFile(const char* filePath, const unsigned char* publicKey, char** extractedPrivateKey) {
+	FILE* inputFile = NULL;
+	unsigned char* privateKey = NULL;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+	int privateKeyLength = 0;
+
+	if (!filePath || !publicKey || !extractedPrivateKey) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化输出参数
+	*extractedPrivateKey = NULL;
+
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 读取并验证文件头
+	if (fread(header, 1, SELF_CONTAINED_MAGIC_SIZE, inputFile) != SELF_CONTAINED_MAGIC_SIZE) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取组合密钥长度
+	if (fread(&storedCombinedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取并验证公钥哈希值
+	unsigned int storedPublicKeyHash;
+	if (fread(&storedPublicKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 读取私钥长度
+	if (fread(&privateKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	if (privateKeyLength != PRIVATE_KEY_SIZE_2048_BITS) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥
+	privateKey = (unsigned char*)malloc(privateKeyLength);
+	if (!privateKey) {
+		fclose(inputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	if (fread(privateKey, 1, privateKeyLength, inputFile) != privateKeyLength) {
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取并验证私钥哈希值
+	unsigned int storedPrivateKeyHash;
+	if (fread(&storedPrivateKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPrivateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	if (storedPrivateKeyHash != currentPrivateKeyHash) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 私钥被篡改
+	}
+
+	// 提取私钥为十六进制字符串
+	*extractedPrivateKey = (char*)malloc(privateKeyLength * 2 + 1);
+	if (!*extractedPrivateKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		fclose(inputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 将二进制私钥转换为十六进制字符串
+	for (int i = 0; i < privateKeyLength; i++) {
+		sprintf_s(*extractedPrivateKey + i * 2, 3, "%02X", privateKey[i]);
+	}
+	(*extractedPrivateKey)[privateKeyLength * 2] = '\0';
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	free(privateKey);
+	fclose(inputFile);
+
+	return SUCCESS;
+}
+
+// 从自包含式加密数据中提取私钥
+int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, char** extractedPrivateKey) {
+	unsigned char* privateKey = NULL;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+	int privateKeyLength = 0;
+
+	if (!inputData || inputLength == 0 || !publicKey || !extractedPrivateKey) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化输出参数
+	*extractedPrivateKey = NULL;
+
+	// 检查最小长度
+	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int);
+	if (inputLength < minSize) {
+		return ERR_INVALID_HEADER;
+	}
+
+	const unsigned char* inPtr = inputData;
+
+	// 验证文件头
+	memcpy(header, inPtr, SELF_CONTAINED_MAGIC_SIZE);
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		return ERR_INVALID_HEADER;
+	}
+	inPtr += SELF_CONTAINED_MAGIC_SIZE;
+
+	// 读取组合密钥长度
+	memcpy(&storedCombinedKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	memcpy(&storedPublicKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥长度
+	memcpy(&privateKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	if (privateKeyLength != PRIVATE_KEY_SIZE_2048_BITS) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取私钥
+	privateKey = (unsigned char*)malloc(privateKeyLength);
+	if (!privateKey) {
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	memcpy(privateKey, inPtr, privateKeyLength);
+	inPtr += privateKeyLength;
+
+	// 验证私钥哈希
+	unsigned int storedPrivateKeyHash;
+	memcpy(&storedPrivateKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPrivateKeyHash = CalculatePrivateKeyHash(privateKey, privateKeyLength);
+	if (storedPrivateKeyHash != currentPrivateKeyHash) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 提取私钥为十六进制字符串
+	*extractedPrivateKey = (char*)malloc(privateKeyLength * 2 + 1);
+	if (!*extractedPrivateKey) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		free(privateKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 将二进制私钥转换为十六进制字符串
+	for (int i = 0; i < privateKeyLength; i++) {
+		sprintf_s(*extractedPrivateKey + i * 2, 3, "%02X", privateKey[i]);
+	}
+	(*extractedPrivateKey)[privateKeyLength * 2] = '\0';
+
+	// 清理资源
+	SecureZeroMemory(privateKey, privateKeyLength);
+	free(privateKey);
+
+	return SUCCESS;
+}

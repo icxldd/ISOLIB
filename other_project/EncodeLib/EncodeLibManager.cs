@@ -1149,5 +1149,228 @@ namespace EncodeLib
         {
             Dispose();
         }
+
+        // ========== 私钥提取函数 ==========
+
+        /// <summary>
+        /// 从自包含式加密文件中提取私钥
+        /// </summary>
+        /// <param name="inputFilePath">加密文件路径</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回私钥十六进制字符串，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数从自包含式加密文件中提取私钥，并验证公钥匹配性和私钥完整性。
+        /// 私钥以十六进制字符串格式返回，便于存储和传输。
+        /// </remarks>
+        public string ExtractPrivateKeyFromFile(string inputFilePath, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(inputFilePath))
+            {
+                throw new ArgumentException("输入文件路径不能为空", nameof(inputFilePath));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            if (!File.Exists(inputFilePath))
+            {
+                throw new FileNotFoundException($"输入文件不存在: {inputFilePath}");
+            }
+
+            IntPtr privateKeyPtr = IntPtr.Zero;
+            string result = null;
+
+            try
+            {
+                // 调用DLL函数
+                int errorCode = dllManager.ExtractPrivateKeyFromFile(inputFilePath, publicKey, out privateKeyPtr);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"提取私钥失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (privateKeyPtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("提取的私钥为空");
+                }
+
+                // 将C字符串转换为C#字符串
+                result = Marshal.PtrToStringAnsi(privateKeyPtr);
+
+                if (string.IsNullOrEmpty(result))
+                {
+                    throw new InvalidOperationException("私钥字符串为空");
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib从文件提取私钥错误: {ex.Message}");
+                throw new InvalidOperationException($"从文件提取私钥失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 释放DLL分配的内存
+                if (privateKeyPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeDecryptedData(privateKeyPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放私钥内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密数据中提取私钥
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回私钥十六进制字符串，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数从自包含式加密数据中提取私钥，并验证公钥匹配性和私钥完整性。
+        /// 私钥以十六进制字符串格式返回，便于存储和传输。
+        /// </remarks>
+        public string ExtractPrivateKeyFromData(byte[] encryptedData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+            IntPtr privateKeyPtr = IntPtr.Zero;
+            string result = null;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(encryptedData.Length);
+                Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
+
+                // 调用DLL函数
+                int errorCode = dllManager.ExtractPrivateKeyFromData(
+                    inputPtr,
+                    new UIntPtr((uint)encryptedData.Length),
+                    publicKey,
+                    out privateKeyPtr);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"提取私钥失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                if (privateKeyPtr == IntPtr.Zero)
+                {
+                    throw new InvalidOperationException("提取的私钥为空");
+                }
+
+                // 将C字符串转换为C#字符串
+                result = Marshal.PtrToStringAnsi(privateKeyPtr);
+
+                if (string.IsNullOrEmpty(result))
+                {
+                    throw new InvalidOperationException("私钥字符串为空");
+                }
+
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib从数据提取私钥错误: {ex.Message}");
+                throw new InvalidOperationException($"从数据提取私钥失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 释放分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+
+                if (privateKeyPtr != IntPtr.Zero)
+                {
+                    try
+                    {
+                        dllManager.FreeDecryptedData(privateKeyPtr);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"释放私钥内存失败: {ex.Message}");
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密文件中提取私钥（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="inputFilePath">加密文件路径</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="privateKey">输出私钥十六进制字符串</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是ExtractPrivateKeyFromFile的安全版本，不会抛出异常，而是通过返回值指示操作结果。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryExtractPrivateKeyFromFile(string inputFilePath, string publicKey, out string privateKey)
+        {
+            privateKey = string.Empty;
+
+            try
+            {
+                privateKey = ExtractPrivateKeyFromFile(inputFilePath, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试从文件提取私钥失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密数据中提取私钥（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="privateKey">输出私钥十六进制字符串</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是ExtractPrivateKeyFromData的安全版本，不会抛出异常，而是通过返回值指示操作结果。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryExtractPrivateKeyFromData(byte[] encryptedData, string publicKey, out string privateKey)
+        {
+            privateKey = string.Empty;
+
+            try
+            {
+                privateKey = ExtractPrivateKeyFromData(encryptedData, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试从数据提取私钥失败: {ex.Message}");
+                return false;
+            }
+        }
     }
 }

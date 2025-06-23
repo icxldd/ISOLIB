@@ -142,6 +142,21 @@ namespace EncodeLib
             IntPtr privateKey,
             int keyLength);
 
+        // ========== 私钥提取函数委托 ==========
+        
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ExtractPrivateKeyFromFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr extractedPrivateKey);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ExtractPrivateKeyFromDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr extractedPrivateKey);
+
         // 硬件ID获取函数委托
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int GetMachineFingerprintDelegate(
@@ -169,6 +184,10 @@ namespace EncodeLib
         public SelfContainedEncryptDataDelegate SelfContainedEncryptData { get; private set; }
         public SelfContainedDecryptDataDelegate SelfContainedDecryptData { get; private set; }
         public Generate2048BitPrivateKeyDelegate Generate2048BitPrivateKey { get; private set; }
+
+        // ========== 私钥提取函数实例 ==========
+        public ExtractPrivateKeyFromFileDelegate ExtractPrivateKeyFromFile { get; private set; }
+        public ExtractPrivateKeyFromDataDelegate ExtractPrivateKeyFromData { get; private set; }
 
         // 硬件ID获取函数实例
         public GetMachineFingerprintDelegate GetMachineFingerprint { get; private set; }
@@ -247,6 +266,10 @@ namespace EncodeLib
                 SelfContainedEncryptData = GetDelegateFromFuncName<SelfContainedEncryptDataDelegate>("SelfContainedEncryptData");
                 SelfContainedDecryptData = GetDelegateFromFuncName<SelfContainedDecryptDataDelegate>("SelfContainedDecryptData");
                 Generate2048BitPrivateKey = GetDelegateFromFuncName<Generate2048BitPrivateKeyDelegate>("Generate2048BitPrivateKey");
+
+                // ========== 私钥提取函数实例 ==========
+                ExtractPrivateKeyFromFile = GetDelegateFromFuncName<ExtractPrivateKeyFromFileDelegate>("ExtractPrivateKeyFromFile");
+                ExtractPrivateKeyFromData = GetDelegateFromFuncName<ExtractPrivateKeyFromDataDelegate>("ExtractPrivateKeyFromData");
 
                 // 硬件ID获取函数实例
                 GetMachineFingerprint = GetDelegateFromFuncName<GetMachineFingerprintDelegate>("GetMachineFingerprint");

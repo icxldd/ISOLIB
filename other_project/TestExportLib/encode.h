@@ -127,6 +127,25 @@ extern "C" {
 	// 返回值: 1表示有效，0表示无效
 	PDUDLL_API int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicKey);
 
+	// ========== 私钥提取函数 ==========
+	
+	// 从自包含式加密文件中提取私钥
+	// filePath: 加密文件路径
+	// publicKey: 公钥（用于验证）
+	// extractedPrivateKey: 输出提取的私钥字符串指针（由函数分配内存）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 调用者需要使用 FreeDecryptedData 释放 extractedPrivateKey 内存
+	PDUDLL_API int ExtractPrivateKeyFromFile(const char* filePath, const unsigned char* publicKey, char** extractedPrivateKey);
+
+	// 从自包含式加密数据中提取私钥
+	// inputData: 输入加密数据指针
+	// inputLength: 输入数据长度
+	// publicKey: 公钥（用于验证）
+	// extractedPrivateKey: 输出提取的私钥字符串指针（由函数分配内存）
+	// 返回值: 0表示成功，负数表示错误码
+	// 注意: 调用者需要使用 FreeDecryptedData 释放 extractedPrivateKey 内存
+	PDUDLL_API int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, char** extractedPrivateKey);
+
 	// ========== 内部辅助函数 ==========
 	
 	// 生成2048位随机私钥

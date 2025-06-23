@@ -501,5 +501,37 @@ namespace TestWin
 
             AppendLog(dd);
         }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            string inputFile = textBox1.Text.Trim();
+            string publicKey = textBox2.Text.Trim();
+            var ddd = EncodeLibManager.Instance.ExtractPrivateKeyFromFile(inputFile,publicKey);
+
+            AppendLog(ddd);
+
+
+
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            string encryptedBase64 = textBox1.Text.Trim();
+            string publicKey = textBox2.Text.Trim();
+            // 验证并转换Base64数据
+            byte[] encryptedData;
+            try
+            {
+                encryptedData = Convert.FromBase64String(encryptedBase64);
+                AppendLog($"✅ Base64解码成功: {encryptedData.Length} 字节");
+            }
+            catch (FormatException)
+            {
+                throw new InvalidOperationException("输入的数据不是有效的Base64格式！请确保输入的是自包含式加密后的Base64字符串。");
+            }
+            var ddd = EncodeLibManager.Instance.ExtractPrivateKeyFromData(encryptedData, publicKey);
+
+            AppendLog(ddd);
+        }
     }
 }
