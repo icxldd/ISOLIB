@@ -100,7 +100,7 @@ namespace EncodeLib
                 
                 if (string.IsNullOrEmpty(dllPath))
                 {
-                    throw new FileNotFoundException("找不到TestExportLib.dll文件");
+                    throw new FileNotFoundException("找不到ExportLib.vmp.dll文件");
                 }
 
                 // 使用Windows API加载DLL
