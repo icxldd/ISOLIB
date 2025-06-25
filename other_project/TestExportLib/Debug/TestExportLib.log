@@ -41,7 +41,7 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(364,5): warning C4273
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(42,17):
       参见“StreamDecryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(504,34): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(505,25): warning C4244: “=”: 从“__int64”转换到“size_t”，可能丢失数据
   (编译源文件“/encode.cpp”)
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(659,5): warning C4273: “StreamEncryptData”: dll 链接不一致
@@ -64,7 +64,7 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(876,6): warning C4273
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(76,18):
       参见“FreeDecryptedData”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(884,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(885,1): warning C4819: 该文件包含不能在当前代码页(936)中表示的字符。请将该文件保存为 Unicode 格式以防止数据丢失
   (编译源文件“/encode.cpp”)
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(889,5): warning C4273: “Generate2048BitPrivateKey”: dll 链接不一致
@@ -87,7 +87,7 @@ D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1114,5): warning C427
       D:\work\code\ISOLib\other_project\TestExportLib\encode.h(102,17):
       参见“SelfContainedDecryptFile”的前一个定义
   
-D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1310,34): warning C4018: “>=”: 有符号/无符号不匹配
+D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1311,25): warning C4244: “=”: 从“__int64”转换到“size_t”，可能丢失数据
   (编译源文件“/encode.cpp”)
   
 D:\work\code\ISOLib\other_project\TestExportLib\encode.cpp(1364,5): warning C4273: “SelfContainedEncryptData”: dll 链接不一致

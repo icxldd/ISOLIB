@@ -264,9 +264,9 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	}
 
 	// 获取文件大小用于进度计算
-	fseek(inputFile, 0, SEEK_END);
-	long totalFileSize = ftell(inputFile);
-	fseek(inputFile, 0, SEEK_SET);
+	_fseeki64(inputFile, 0, SEEK_END);
+	__int64 totalFileSize = _ftelli64(inputFile);
+	_fseeki64(inputFile, 0, SEEK_SET);
 
 	// 打开输出文件
 	fopen_s(&outputFile, outputPath, "wb");
@@ -300,7 +300,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 
 	// 大块处理文件以实现复杂加密的最高速度
 	size_t bytesRead;
-	long totalProcessed = 0;
+	__int64 totalProcessed = 0;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 高效双层XOR + 半字节交换加密算法（替代位旋转）
@@ -444,10 +444,10 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 
 	// *** 新增：立即验证校验和，避免大文件错误解密 ***
 	// 保存当前文件位置
-	long currentPos = ftell(inputFile);
+	__int64 currentPos = _ftelli64(inputFile);
 
 	// 跳到文件末尾读取校验和
-	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	_fseeki64(inputFile, -(__int64)sizeof(unsigned int), SEEK_END);
 	unsigned int storedChecksum;
 	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
 		// 使用更强的CRC32校验和替代简单校验和
@@ -465,7 +465,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 	}
 
 	// 恢复文件位置到数据开始处
-	fseek(inputFile, currentPos, SEEK_SET);
+	_fseeki64(inputFile, currentPos, SEEK_SET);
 
 	// 打开输出文件
 	fopen_s(&outputFile, outputPath, "wb");
@@ -485,10 +485,10 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 	}
 
 	// 获取文件大小并计算数据区大小
-	fseek(inputFile, 0, SEEK_END);
-	long fileSize = ftell(inputFile);
-	fseek(inputFile, MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int), SEEK_SET); // 更新文件位置，考虑新增的公钥哈希
-	long dataSize = fileSize - MAGIC_HEADER_SIZE - sizeof(int) - sizeof(unsigned int) - sizeof(unsigned int); // 更新数据区大小计算
+	_fseeki64(inputFile, 0, SEEK_END);
+	__int64 fileSize = _ftelli64(inputFile);
+	_fseeki64(inputFile, currentPos, SEEK_SET);
+	__int64 dataSize = fileSize - currentPos - sizeof(unsigned int);
 
 	// 初始进度回调通知
 	if (progressCallback) {
@@ -497,7 +497,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 
 	// 大块处理文件以实现复杂解密的最高速度
 	size_t bytesRead;
-	long totalProcessed = 0;
+	__int64 totalProcessed = 0;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 处理包含校验和的最后数据块
@@ -635,7 +635,7 @@ int ValidateEncryptedFile(const char* filePath, const unsigned char* publicKey) 
 	}
 
 	// Validate checksum at the end of file
-	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	_fseeki64(inputFile, -(__int64)sizeof(unsigned int), SEEK_END);
 	unsigned int storedChecksum;
 	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
 		// 使用更强的CRC32校验和替代简单校验和
@@ -1005,9 +1005,9 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 	}
 
 	// 获取文件大小
-	fseek(inputFile, 0, SEEK_END);
-	long totalFileSize = ftell(inputFile);
-	fseek(inputFile, 0, SEEK_SET);
+	_fseeki64(inputFile, 0, SEEK_END);
+	__int64 totalFileSize = _ftelli64(inputFile);
+	_fseeki64(inputFile, 0, SEEK_SET);
 
 	// 打开输出文件
 	fopen_s(&outputFile, outputPath, "wb");
@@ -1055,7 +1055,7 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 
 	// 加密文件数据
 	size_t bytesRead;
-	long totalProcessed = 0;
+	__int64 totalProcessed = 0;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 使用相同的双层XOR + 半字节交换加密算法
@@ -1241,8 +1241,8 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 	}
 
 	// 立即验证校验和
-	long currentPos = ftell(inputFile);
-	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	__int64 currentPos = _ftelli64(inputFile);
+	_fseeki64(inputFile, -(__int64)sizeof(unsigned int), SEEK_END);
 	unsigned int storedChecksum;
 	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
 		unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
@@ -1264,8 +1264,8 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 		return ERR_INVALID_HEADER;
 	}
 
-	// 恢复文件位置
-	fseek(inputFile, currentPos, SEEK_SET);
+	// 恢复文件位置到数据开始处
+	_fseeki64(inputFile, currentPos, SEEK_SET);
 
 	// 打开输出文件
 	fopen_s(&outputFile, outputPath, "wb");
@@ -1291,10 +1291,10 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 	}
 
 	// 计算数据区大小
-	fseek(inputFile, 0, SEEK_END);
-	long fileSize = ftell(inputFile);
-	fseek(inputFile, currentPos, SEEK_SET);
-	long dataSize = fileSize - currentPos - sizeof(unsigned int);
+	_fseeki64(inputFile, 0, SEEK_END);
+	__int64 fileSize = _ftelli64(inputFile);
+	_fseeki64(inputFile, currentPos, SEEK_SET);
+	__int64 dataSize = fileSize - currentPos - sizeof(unsigned int);
 
 	// 进度回调初始化
 	if (progressCallback) {
@@ -1303,7 +1303,7 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 
 	// 解密文件数据
 	size_t bytesRead;
-	long totalProcessed = 0;
+	__int64 totalProcessed = 0;
 
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 处理包含校验和的最后数据块
@@ -1759,7 +1759,7 @@ int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicK
 	}
 
 	// 验证校验和
-	fseek(inputFile, -(long)sizeof(unsigned int), SEEK_END);
+	_fseeki64(inputFile, -(__int64)sizeof(unsigned int), SEEK_END);
 	unsigned int storedChecksum;
 	if (fread(&storedChecksum, sizeof(unsigned int), 1, inputFile) == 1) {
 		unsigned int calculatedChecksum = CalculateCRC32(combinedKey, combinedKeyLength);
