@@ -7,6 +7,22 @@ using System.Threading.Tasks;
 
 namespace EncodeLib
 {
+    /// <summary>
+    /// 全局数据和常量定义
+    /// </summary>
+    public static class GlobalData
+    {
+        /// <summary>
+        /// 加密库DLL文件名
+        /// </summary>
+        public const string DLL_NAME = "ExportLib.vmp.dll";
+        
+        /// <summary>
+        /// 备用DLL文件名
+        /// </summary>
+        public const string DLL_NAME_BACKUP = "TestExportLib.vmp.dll";
+    }
+
     // 进度回调委托定义
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);

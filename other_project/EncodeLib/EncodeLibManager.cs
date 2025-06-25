@@ -103,8 +103,8 @@ namespace EncodeLib
             {
                 // 可能的DLL文件名
                 string[] dllNames = {
-                    "ExportLib.vmp.dll",
-                    "TestExportLib.vmp.dll"
+                    GlobalData.DLL_NAME,
+                    GlobalData.DLL_NAME_BACKUP
                 };
 
                 byte[] dllBytes = null;
@@ -178,7 +178,7 @@ namespace EncodeLib
                     
                     if (string.IsNullOrEmpty(dllPath))
                     {
-                        throw new FileNotFoundException("找不到ExportLib.vmp.dll文件，且无法从嵌入资源中提取");
+                        throw new FileNotFoundException($"找不到{GlobalData.DLL_NAME}文件，且无法从嵌入资源中提取");
                     }
                 }
 
@@ -209,7 +209,7 @@ namespace EncodeLib
         {
             try
             {
-                const string dllName = "ExportLib.vmp.dll";
+                const string dllName = GlobalData.DLL_NAME;
                 
                 // 检查嵌入资源中是否存在DLL
                 if (!EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
@@ -280,7 +280,7 @@ namespace EncodeLib
         {
             // 可能的DLL文件名
             string[] dllNames = {
-                "ExportLib.vmp.dll"
+                GlobalData.DLL_NAME
             };
 
             // 可能的搜索路径
