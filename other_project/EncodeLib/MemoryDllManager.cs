@@ -14,8 +14,8 @@ namespace EncodeLib
         private bool disposed = false;
 
         // 委托定义 - 与原始DllImport声明对应
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
+        //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        //public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void HelloWord2Delegate(UInt32 hh);
@@ -44,10 +44,6 @@ namespace EncodeLib
             [MarshalAs(UnmanagedType.LPStr)] string key,
             ProgressCallback progressCallback);
 
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate int ValidateEncryptedFileDelegate(
-            [MarshalAs(UnmanagedType.LPStr)] string filePath,
-            [MarshalAs(UnmanagedType.LPStr)] string key);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int GetNTPTimestampDelegate(out long timestamp);
@@ -84,6 +80,73 @@ namespace EncodeLib
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void FreeDecryptedDataDelegate(IntPtr data);
 
+        // ========== 自包含式加密/解密函数委托（无需预设私钥） ==========
+        
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedEncryptFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            ProgressCallback progressCallback);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedDecryptFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string outputPath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            ProgressCallback progressCallback);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedEncryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int SelfContainedDecryptDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr outputData,
+            out UIntPtr outputLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ValidateSelfContainedFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int Generate2048BitPrivateKeyDelegate(
+            IntPtr privateKey,
+            out int keyLength);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate uint CalculatePrivateKeyHashDelegate(
+            IntPtr privateKey,
+            int keyLength);
+
+        // ========== 私钥提取函数委托 ==========
+        
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ExtractPrivateKeyFromFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr extractedPrivateKey);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int ExtractPrivateKeyFromDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out IntPtr extractedPrivateKey);
+
+        // 硬件ID获取函数委托
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetMachineFingerprintDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] System.Text.StringBuilder data);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -98,6 +161,20 @@ namespace EncodeLib
         public StreamDecryptDataDelegate StreamDecryptData { get; private set; }
         public FreeEncryptedDataDelegate FreeEncryptedData { get; private set; }
         public FreeDecryptedDataDelegate FreeDecryptedData { get; private set; }
+
+        // ========== 自包含式加密/解密函数实例（无需预设私钥） ==========
+        public SelfContainedEncryptFileDelegate SelfContainedEncryptFile { get; private set; }
+        public SelfContainedDecryptFileDelegate SelfContainedDecryptFile { get; private set; }
+        public SelfContainedEncryptDataDelegate SelfContainedEncryptData { get; private set; }
+        public SelfContainedDecryptDataDelegate SelfContainedDecryptData { get; private set; }
+        public Generate2048BitPrivateKeyDelegate Generate2048BitPrivateKey { get; private set; }
+
+        // ========== 私钥提取函数实例 ==========
+        public ExtractPrivateKeyFromFileDelegate ExtractPrivateKeyFromFile { get; private set; }
+        public ExtractPrivateKeyFromDataDelegate ExtractPrivateKeyFromData { get; private set; }
+
+        // 硬件ID获取函数实例
+        public GetMachineFingerprintDelegate GetMachineFingerprint { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL到内存
@@ -170,12 +247,25 @@ namespace EncodeLib
                 StreamDecryptData = dllInstance.GetDelegateFromFuncName<StreamDecryptDataDelegate>("StreamDecryptData");
                 FreeEncryptedData = dllInstance.GetDelegateFromFuncName<FreeEncryptedDataDelegate>("FreeEncryptedData");
                 FreeDecryptedData = dllInstance.GetDelegateFromFuncName<FreeDecryptedDataDelegate>("FreeDecryptedData");
+
+                // ========== 自包含式加密/解密函数实例（无需预设私钥） ==========
+                SelfContainedEncryptFile = dllInstance.GetDelegateFromFuncName<SelfContainedEncryptFileDelegate>("SelfContainedEncryptFile");
+                SelfContainedDecryptFile = dllInstance.GetDelegateFromFuncName<SelfContainedDecryptFileDelegate>("SelfContainedDecryptFile");
+                SelfContainedEncryptData = dllInstance.GetDelegateFromFuncName<SelfContainedEncryptDataDelegate>("SelfContainedEncryptData");
+                SelfContainedDecryptData = dllInstance.GetDelegateFromFuncName<SelfContainedDecryptDataDelegate>("SelfContainedDecryptData");
+                Generate2048BitPrivateKey = dllInstance.GetDelegateFromFuncName<Generate2048BitPrivateKeyDelegate>("Generate2048BitPrivateKey");
+
+                // ========== 私钥提取函数实例 ==========
+                ExtractPrivateKeyFromFile = dllInstance.GetDelegateFromFuncName<ExtractPrivateKeyFromFileDelegate>("ExtractPrivateKeyFromFile");
+                ExtractPrivateKeyFromData = dllInstance.GetDelegateFromFuncName<ExtractPrivateKeyFromDataDelegate>("ExtractPrivateKeyFromData");
+
+                // 硬件ID获取函数实例
+                GetMachineFingerprint = dllInstance.GetDelegateFromFuncName<GetMachineFingerprintDelegate>("GetMachineFingerprint");
             }
             catch (EntryPointNotFoundException ex)
             {
                 throw new InvalidOperationException($"无法找到DLL导出函数: {ex.Message}", ex);
             }
-
         }
 
         /// <summary>
@@ -196,9 +286,6 @@ namespace EncodeLib
             }
         }
 
-        // 进度回调委托定义
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);
+  
     }
-
 }

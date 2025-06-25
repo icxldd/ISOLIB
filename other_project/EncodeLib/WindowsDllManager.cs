@@ -25,8 +25,8 @@ namespace EncodeLib
         private bool disposed = false;
 
         // 委托定义 - 与原始DllImport声明对应
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
+        //[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        //public delegate void HelloWordDelegate(IntPtr intPtr, ref PDU_RSC_STATUS_ITEM pItem, byte[] p2, UInt32[] p3, PDU_RSC_STATUS_DATA p4, [MarshalAs(UnmanagedType.LPStr)] string PreselectionValue);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void HelloWord2Delegate(UInt32 hh);
@@ -300,9 +300,6 @@ namespace EncodeLib
                 disposed = true;
             }
         }
-        // 进度回调委托定义
-        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-        public delegate void ProgressCallback([MarshalAs(UnmanagedType.LPStr)] string filePath, double progress);
     }
 
 

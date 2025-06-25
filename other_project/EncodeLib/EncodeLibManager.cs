@@ -11,6 +11,7 @@ namespace EncodeLib
     public class EncodeLibManager : IDisposable
     {
         private WindowsDllManager dllManager;
+        private MemoryDllManager memoryDllManager;
         private bool disposed = false;
         private static EncodeLibManager instance;
         private static readonly object lockObject = new object();
@@ -41,7 +42,11 @@ namespace EncodeLib
         /// </summary>
         private EncodeLibManager()
         {
-            InitializeWindowsDll();
+            // 优先尝试内存加载，失败则回退到Windows API加载
+            if (!InitializeMemoryDll())
+            {
+                InitializeWindowsDll();
+            }
         }
 
         /// <summary>
@@ -89,6 +94,74 @@ namespace EncodeLib
         }
 
         /// <summary>
+        /// 初始化内存DLL管理器，从嵌入资源加载DLL
+        /// </summary>
+        /// <returns>成功返回true，失败返回false</returns>
+        private bool InitializeMemoryDll()
+        {
+            try
+            {
+                // 可能的DLL文件名
+                string[] dllNames = {
+                    "ExportLib.vmp.dll",
+                    "TestExportLib.vmp.dll"
+                };
+
+                byte[] dllBytes = null;
+                string foundDllName = null;
+
+                // 尝试从嵌入资源加载DLL
+                foreach (string dllName in dllNames)
+                {
+                    try
+                    {
+                        if (EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
+                        {
+                            dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
+                            foundDllName = dllName;
+                            break;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"尝试加载嵌入DLL {dllName} 失败: {ex.Message}");
+                        continue;
+                    }
+                }
+
+                if (dllBytes == null)
+                {
+                    System.Diagnostics.Debug.WriteLine("EncodeLib: 未找到嵌入的DLL资源");
+                    return false;
+                }
+
+                // 使用内存DLL管理器加载
+                memoryDllManager = new MemoryDllManager(dllBytes);
+
+                // 验证DLL是否成功加载
+                if (!memoryDllManager.IsLoaded)
+                {
+                    memoryDllManager?.Dispose();
+                    memoryDllManager = null;
+                    return false;
+                }
+
+                System.Diagnostics.Debug.WriteLine($"EncodeLib: 内存DLL加载成功！资源: {foundDllName}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                string errorMsg = $"初始化内存DLL失败: {ex.Message}";
+                System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
+                
+                // 清理资源
+                memoryDllManager?.Dispose();
+                memoryDllManager = null;
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 初始化Windows DLL管理器，使用Windows API加载DLL
         /// </summary>
         private void InitializeWindowsDll()
@@ -100,7 +173,13 @@ namespace EncodeLib
                 
                 if (string.IsNullOrEmpty(dllPath))
                 {
-                    throw new FileNotFoundException("找不到ExportLib.vmp.dll文件");
+                    // 尝试从嵌入资源提取DLL到当前运行目录
+                    dllPath = ExtractEmbeddedDllToCurrentDirectory();
+                    
+                    if (string.IsNullOrEmpty(dllPath))
+                    {
+                        throw new FileNotFoundException("找不到ExportLib.vmp.dll文件，且无法从嵌入资源中提取");
+                    }
                 }
 
                 // 使用Windows API加载DLL
@@ -119,6 +198,77 @@ namespace EncodeLib
                 string errorMsg = $"初始化Windows DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
                 throw new InvalidOperationException(errorMsg, ex);
+            }
+        }
+
+        /// <summary>
+        /// 从嵌入资源提取DLL到当前运行目录
+        /// </summary>
+        /// <returns>成功返回DLL文件路径，失败返回null</returns>
+        private string ExtractEmbeddedDllToCurrentDirectory()
+        {
+            try
+            {
+                const string dllName = "ExportLib.vmp.dll";
+                
+                // 检查嵌入资源中是否存在DLL
+                if (!EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
+                {
+                    System.Diagnostics.Debug.WriteLine($"嵌入资源中不存在: {dllName}");
+                    return null;
+                }
+
+                // 从嵌入资源读取DLL字节数组
+                byte[] dllBytes = EmbeddedResourceManager.GetEmbeddedDllBytes(dllName);
+                if (dllBytes == null || dllBytes.Length == 0)
+                {
+                    System.Diagnostics.Debug.WriteLine($"从嵌入资源读取DLL失败: {dllName}");
+                    return null;
+                }
+
+                // 确定输出路径（当前运行目录）
+                string outputPath = Path.Combine(Environment.CurrentDirectory, dllName);
+
+                // 如果文件已存在且大小相同，直接返回路径
+                if (File.Exists(outputPath))
+                {
+                    FileInfo existingFile = new FileInfo(outputPath);
+                    if (existingFile.Length == dllBytes.Length)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"DLL文件已存在且大小匹配: {outputPath}");
+                        return outputPath;
+                    }
+                }
+
+                // 写入DLL文件到磁盘
+                File.WriteAllBytes(outputPath, dllBytes);
+
+                // 验证文件是否成功写入
+                if (File.Exists(outputPath))
+                {
+                    FileInfo writtenFile = new FileInfo(outputPath);
+                    if (writtenFile.Length == dllBytes.Length)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"成功从嵌入资源提取DLL: {outputPath} (大小: {dllBytes.Length:N0} 字节)");
+                        return outputPath;
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"DLL文件大小不匹配: 期望 {dllBytes.Length}, 实际 {writtenFile.Length}");
+                        File.Delete(outputPath); // 删除损坏的文件
+                        return null;
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine($"DLL文件写入失败: {outputPath}");
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"从嵌入资源提取DLL时发生错误: {ex.Message}");
+                return null;
             }
         }
 
@@ -163,7 +313,21 @@ namespace EncodeLib
         /// <summary>
         /// 检查DLL是否已加载
         /// </summary>
-        public bool IsLoaded => dllManager?.IsLoaded == true && !disposed;
+        public bool IsLoaded => (dllManager?.IsLoaded == true || memoryDllManager?.IsLoaded == true) && !disposed;
+
+        /// <summary>
+        /// 获取当前DLL管理器（内存优先）
+        /// </summary>
+        /// <returns>当前可用的DLL管理器接口</returns>
+        private dynamic GetCurrentDllManager()
+        {
+            if (memoryDllManager?.IsLoaded == true)
+                return memoryDllManager;
+            else if (dllManager?.IsLoaded == true)
+                return dllManager;
+            else
+                throw new InvalidOperationException("没有可用的DLL管理器");
+        }
 
         // ========== 双密钥系统管理函数 ==========
 
@@ -183,7 +347,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.InitStreamFile(privateKey);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.InitStreamFile(privateKey);
             }
             catch (Exception ex)
             {
@@ -201,7 +366,8 @@ namespace EncodeLib
 
             try
             {
-                dllManager.ClearPrivateKey();
+                var currentManager = GetCurrentDllManager();
+                currentManager.ClearPrivateKey();
             }
             catch (Exception ex)
             {
@@ -219,7 +385,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.IsPrivateKeySet() == 1;
+                var currentManager = GetCurrentDllManager();
+                return currentManager.IsPrivateKeySet() == 1;
             }
             catch (Exception ex)
             {
@@ -254,7 +421,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.StreamEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -296,7 +464,7 @@ namespace EncodeLib
                 }
 
                 // 执行加密
-                return dllManager.StreamEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                return EncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -329,7 +497,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -371,7 +540,7 @@ namespace EncodeLib
                 }
 
                 // 执行解密
-                return dllManager.StreamDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                return DecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -419,7 +588,8 @@ namespace EncodeLib
 
                 // 调用DLL函数
                 UIntPtr outputLength;
-                int errorCode = dllManager.StreamEncryptData(
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.StreamEncryptData(
                     inputPtr,
                     new UIntPtr((uint)inputData.Length),
                     publicKey,
@@ -460,7 +630,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeEncryptedData(outputPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeEncryptedData(outputPtr);
                     }
                     catch (Exception ex)
                     {
@@ -552,7 +723,8 @@ namespace EncodeLib
 
                 // 调用DLL函数
                 UIntPtr outputLength;
-                int errorCode = dllManager.StreamDecryptData(
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.StreamDecryptData(
                     inputPtr,
                     new UIntPtr((uint)encryptedData.Length),
                     publicKey,
@@ -593,7 +765,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeDecryptedData(outputPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeDecryptedData(outputPtr);
                     }
                     catch (Exception ex)
                     {
@@ -680,7 +853,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.GetNTPTimestamp(out timestamp);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.GetNTPTimestamp(out timestamp);
             }
             catch (Exception ex)
             {
@@ -729,7 +903,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.SelfContainedEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.SelfContainedEncryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -776,7 +951,8 @@ namespace EncodeLib
 
             try
             {
-                return dllManager.SelfContainedDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
+                var currentManager = GetCurrentDllManager();
+                return currentManager.SelfContainedDecryptFile(inputFilePath, outputFilePath, publicKey, progressCallback);
             }
             catch (Exception ex)
             {
@@ -821,7 +997,8 @@ namespace EncodeLib
 
                 // 调用DLL函数
                 UIntPtr outputLength;
-                int errorCode = dllManager.SelfContainedEncryptData(
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.SelfContainedEncryptData(
                     inputPtr,
                     new UIntPtr((uint)inputData.Length),
                     publicKey,
@@ -862,7 +1039,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeEncryptedData(outputPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeEncryptedData(outputPtr);
                     }
                     catch (Exception ex)
                     {
@@ -908,7 +1086,8 @@ namespace EncodeLib
 
                 // 调用DLL函数
                 UIntPtr outputLength;
-                int errorCode = dllManager.SelfContainedDecryptData(
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.SelfContainedDecryptData(
                     inputPtr,
                     new UIntPtr((uint)encryptedData.Length),
                     publicKey,
@@ -949,7 +1128,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeDecryptedData(outputPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeDecryptedData(outputPtr);
                     }
                     catch (Exception ex)
                     {
@@ -981,7 +1161,8 @@ namespace EncodeLib
                 privateKeyPtr = Marshal.AllocHGlobal(PRIVATE_KEY_SIZE);
 
                 int keyLength;
-                int errorCode = dllManager.Generate2048BitPrivateKey(privateKeyPtr, out keyLength);
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.Generate2048BitPrivateKey(privateKeyPtr, out keyLength);
 
                 if (errorCode != 0)
                 {
@@ -1040,7 +1221,8 @@ namespace EncodeLib
                 System.Text.StringBuilder fingerprint = new System.Text.StringBuilder(256);
 
                 // 调用DLL函数获取机器指纹
-                int errorCode = dllManager.GetMachineFingerprint(fingerprint);
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.GetMachineFingerprint(fingerprint);
 
                 if (errorCode != 0)
                 {
@@ -1093,7 +1275,9 @@ namespace EncodeLib
         /// </summary>
         private void CheckDllLoaded()
         {
-            if (dllManager == null || !dllManager.IsLoaded || disposed)
+            if ((dllManager == null || !dllManager.IsLoaded) && 
+                (memoryDllManager == null || !memoryDllManager.IsLoaded) || 
+                disposed)
             {
                 throw new InvalidOperationException("DLL未加载或已释放！");
             }
@@ -1130,6 +1314,10 @@ namespace EncodeLib
             {
                 dllManager?.Dispose();
                 dllManager = null;
+                
+                memoryDllManager?.Dispose();
+                memoryDllManager = null;
+                
                 disposed = true;
 
                 lock (lockObject)
@@ -1187,7 +1375,8 @@ namespace EncodeLib
             try
             {
                 // 调用DLL函数
-                int errorCode = dllManager.ExtractPrivateKeyFromFile(inputFilePath, publicKey, out privateKeyPtr);
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.ExtractPrivateKeyFromFile(inputFilePath, publicKey, out privateKeyPtr);
 
                 if (errorCode != 0)
                 {
@@ -1221,7 +1410,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeDecryptedData(privateKeyPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeDecryptedData(privateKeyPtr);
                     }
                     catch (Exception ex)
                     {
@@ -1266,7 +1456,8 @@ namespace EncodeLib
                 Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
 
                 // 调用DLL函数
-                int errorCode = dllManager.ExtractPrivateKeyFromData(
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.ExtractPrivateKeyFromData(
                     inputPtr,
                     new UIntPtr((uint)encryptedData.Length),
                     publicKey,
@@ -1309,7 +1500,8 @@ namespace EncodeLib
                 {
                     try
                     {
-                        dllManager.FreeDecryptedData(privateKeyPtr);
+                        var currentManager = GetCurrentDllManager();
+                        currentManager.FreeDecryptedData(privateKeyPtr);
                     }
                     catch (Exception ex)
                     {
