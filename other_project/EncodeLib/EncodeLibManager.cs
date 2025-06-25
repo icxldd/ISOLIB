@@ -43,7 +43,7 @@ namespace EncodeLib
         private EncodeLibManager()
         {
             // 优先尝试内存加载，失败则回退到Windows API加载
-            //if (!InitializeMemoryDll())
+            if (!InitializeMemoryDll())
             {
                 InitializeWindowsDll();
             }
