@@ -509,9 +509,6 @@ namespace TestWin
             var ddd = EncodeLibManager.Instance.ExtractPrivateKeyFromFile(inputFile,publicKey);
 
             AppendLog(ddd);
-
-
-
         }
 
         private void button3_Click(object sender, EventArgs e)
@@ -532,6 +529,131 @@ namespace TestWin
             var ddd = EncodeLibManager.Instance.ExtractPrivateKeyFromData(encryptedData, publicKey);
 
             AppendLog(ddd);
+        }
+
+        /// <summary>
+        /// 获取自包含式加密时间戳按钮点击事件
+        /// </summary>
+        private void button4_Click(object sender, EventArgs e)
+        {
+            if (!CheckEncodeLibAvailable()) return;
+
+            try
+            {
+                string input = textBox1.Text.Trim();
+                string publicKey = textBox2.Text.Trim();
+
+                // 验证输入
+                if (string.IsNullOrEmpty(input))
+                {
+                    MessageBox.Show("请输入文件路径或加密数据！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(publicKey))
+                {
+                    MessageBox.Show("请输入公钥！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                AppendLog("🕐 ===== 获取自包含式加密时间戳 =====");
+                AppendLog($"📝 输入内容: {(input.Length > 50 ? input.Substring(0, 50) + "..." : input)}");
+                AppendLog($"🔑 公钥: {publicKey}");
+
+                long timestamp = 0;
+                bool success = false;
+
+                // 判断输入是文件路径还是数据
+                if (System.IO.File.Exists(input))
+                {
+                    // 作为文件路径处理
+                    AppendLog("📁 检测到文件路径，使用自包含式文件时间戳获取方法...");
+                    
+                    if (EncodeLibManager.Instance.TryGetSelfContainedTimestampFromFile(input, publicKey, out timestamp))
+                    {
+                        success = true;
+                        AppendLog("✅ 自包含式文件时间戳获取成功！");
+                    }
+                    else
+                    {
+                        AppendLog("✗ 自包含式文件时间戳获取失败！可能不是有效的自包含式加密文件或公钥不匹配。");
+                    }
+                }
+                else
+                {
+                    // 作为Base64数据处理
+                    AppendLog("📊 作为加密数据处理，使用自包含式数据时间戳获取方法...");
+                    
+                    try
+                    {
+                        // 验证是否为Base64格式
+                        byte[] dataBytes = Convert.FromBase64String(input);
+                        AppendLog($"📊 Base64解码成功，数据长度: {dataBytes.Length} 字节");
+                        
+                        if (EncodeLibManager.Instance.TryGetSelfContainedTimestampFromData(dataBytes, publicKey, out timestamp))
+                        {
+                            success = true;
+                            AppendLog("✅ 自包含式数据时间戳获取成功！");
+                        }
+                        else
+                        {
+                            AppendLog("✗ 自包含式数据时间戳获取失败！可能不是有效的自包含式加密数据或公钥不匹配。");
+                        }
+                    }
+                    catch (FormatException)
+                    {
+                        AppendLog("✗ 输入既不是有效的文件路径，也不是有效的Base64数据！");
+                    }
+                }
+
+                if (success)
+                {
+                    // 转换时间戳为可读格式
+                    DateTime encryptionTime = EncodeLibManager.ConvertTimestampToUtcDateTime(timestamp);
+                    DateTime localTime = EncodeLibManager.ConvertTimestampToLocalDateTime(timestamp);
+                    
+                    AppendLog("");
+                    AppendLog("🕐 ===== 自包含式加密时间信息 =====");
+                    AppendLog($"🔢 UTC时间戳: {timestamp}");
+                    AppendLog($"🌍 UTC时间: {encryptionTime:yyyy-MM-dd HH:mm:ss}");
+                    AppendLog($"🏠 本地时间: {localTime:yyyy-MM-dd HH:mm:ss}");
+                    
+                    // 计算时间差
+                    TimeSpan timeDiff = DateTime.Now - localTime;
+                    AppendLog($"⏱️ 距离现在: {FormatTimeSpan(timeDiff)}");
+                    AppendLog($"🔒 说明: 该时间戳嵌入在自包含式加密数据中，带有CRC校验防篡改");
+
+                    string timeInfo = $"自包含式加密时间戳获取成功！\n\nUTC时间戳: {timestamp}\nUTC时间: {encryptionTime:yyyy-MM-dd HH:mm:ss}\n本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\n距离现在: {FormatTimeSpan(timeDiff)}\n\n该时间戳嵌入在自包含式加密数据中，\n带有CRC校验防篡改保护。";
+                    MessageBox.Show(timeInfo, "自包含式加密时间戳信息", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    AppendLog("❌ 获取失败：请检查输入是否为有效的自包含式加密内容");
+                    MessageBox.Show("获取自包含式加密时间戳失败！\n\n请检查：\n• 输入的文件或数据是否为有效的自包含式加密内容\n• 公钥是否正确\n• 数据是否完整未被篡改", "获取失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"✗ 获取时间戳异常: {ex.Message}");
+                MessageBox.Show($"获取自包含式加密时间戳时发生异常:\n{ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 格式化时间跨度为易读字符串
+        /// </summary>
+        /// <param name="timeSpan">时间跨度</param>
+        /// <returns>格式化后的字符串</returns>
+        private string FormatTimeSpan(TimeSpan timeSpan)
+        {
+            if (timeSpan.TotalDays >= 1)
+                return $"{(int)timeSpan.TotalDays}天{timeSpan.Hours}小时{timeSpan.Minutes}分钟";
+            else if (timeSpan.TotalHours >= 1)
+                return $"{timeSpan.Hours}小时{timeSpan.Minutes}分钟";
+            else if (timeSpan.TotalMinutes >= 1)
+                return $"{timeSpan.Minutes}分钟{timeSpan.Seconds}秒";
+            else
+                return $"{timeSpan.Seconds}秒";
         }
     }
 }

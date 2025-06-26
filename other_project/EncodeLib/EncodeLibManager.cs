@@ -1564,5 +1564,407 @@ namespace EncodeLib
                 return false;
             }
         }
+
+        // ========== 时间戳获取函数 ==========
+
+        /// <summary>
+        /// 从双密钥系统加密文件中获取加密时间戳
+        /// </summary>
+        /// <param name="filePath">加密文件路径</param>
+        /// <param name="privateKey">私钥字符串（用于验证）</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回加密时的UTC时间戳，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数需要同时提供私钥和公钥来验证文件的完整性和匹配性。
+        /// 返回的时间戳是文件加密时的UTC时间，以秒为单位。
+        /// </remarks>
+        public long GetEncryptionTimestampFromFile(string filePath, string privateKey, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                throw new ArgumentException("文件路径不能为空", nameof(filePath));
+            }
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            if (!File.Exists(filePath))
+            {
+                throw new FileNotFoundException($"文件不存在: {filePath}");
+            }
+
+            try
+            {
+                var currentManager = GetCurrentDllManager();
+                long timestamp;
+                int errorCode = currentManager.GetEncryptionTimestampFromFile(filePath, privateKey, publicKey, out timestamp);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取加密时间戳失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                return timestamp;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取文件加密时间戳错误: {ex.Message}");
+                throw new InvalidOperationException($"获取文件加密时间戳失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 从双密钥系统加密数据中获取加密时间戳
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="privateKey">私钥字符串（用于验证）</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回加密时的UTC时间戳，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数需要同时提供私钥和公钥来验证数据的完整性和匹配性。
+        /// 返回的时间戳是数据加密时的UTC时间，以秒为单位。
+        /// </remarks>
+        public long GetEncryptionTimestampFromData(byte[] encryptedData, string privateKey, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(privateKey))
+            {
+                throw new ArgumentException("私钥不能为空", nameof(privateKey));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(encryptedData.Length);
+                Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
+
+                // 调用DLL函数
+                var currentManager = GetCurrentDllManager();
+                long timestamp;
+                int errorCode = currentManager.GetEncryptionTimestampFromData(
+                    inputPtr,
+                    new UIntPtr((uint)encryptedData.Length),
+                    privateKey,
+                    publicKey,
+                    out timestamp);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取加密时间戳失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                return timestamp;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取数据加密时间戳错误: {ex.Message}");
+                throw new InvalidOperationException($"获取数据加密时间戳失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 释放分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密文件中获取加密时间戳
+        /// </summary>
+        /// <param name="filePath">加密文件路径</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回加密时的UTC时间戳，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数只需要提供公钥来验证文件的完整性，因为私钥已包含在文件中。
+        /// 返回的时间戳是文件加密时的UTC时间，以秒为单位。
+        /// </remarks>
+        public long GetSelfContainedTimestampFromFile(string filePath, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (string.IsNullOrEmpty(filePath))
+            {
+                throw new ArgumentException("文件路径不能为空", nameof(filePath));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            if (!File.Exists(filePath))
+            {
+                throw new FileNotFoundException($"文件不存在: {filePath}");
+            }
+
+            try
+            {
+                var currentManager = GetCurrentDllManager();
+                long timestamp;
+                int errorCode = currentManager.GetSelfContainedTimestampFromFile(filePath, publicKey, out timestamp);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取加密时间戳失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                return timestamp;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取自包含文件加密时间戳错误: {ex.Message}");
+                throw new InvalidOperationException($"获取自包含文件加密时间戳失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密数据中获取加密时间戳
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <returns>成功返回加密时的UTC时间戳，失败抛出异常</returns>
+        /// <remarks>
+        /// 此函数只需要提供公钥来验证数据的完整性，因为私钥已包含在数据中。
+        /// 返回的时间戳是数据加密时的UTC时间，以秒为单位。
+        /// </remarks>
+        public long GetSelfContainedTimestampFromData(byte[] encryptedData, string publicKey)
+        {
+            CheckDllLoaded();
+
+            if (encryptedData == null || encryptedData.Length == 0)
+            {
+                throw new ArgumentException("加密数据不能为空", nameof(encryptedData));
+            }
+
+            if (string.IsNullOrEmpty(publicKey))
+            {
+                throw new ArgumentException("公钥不能为空", nameof(publicKey));
+            }
+
+            IntPtr inputPtr = IntPtr.Zero;
+
+            try
+            {
+                // 分配非托管内存用于输入数据
+                inputPtr = Marshal.AllocHGlobal(encryptedData.Length);
+                Marshal.Copy(encryptedData, 0, inputPtr, encryptedData.Length);
+
+                // 调用DLL函数
+                var currentManager = GetCurrentDllManager();
+                long timestamp;
+                int errorCode = currentManager.GetSelfContainedTimestampFromData(
+                    inputPtr,
+                    new UIntPtr((uint)encryptedData.Length),
+                    publicKey,
+                    out timestamp);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取加密时间戳失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                return timestamp;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取自包含数据加密时间戳错误: {ex.Message}");
+                throw new InvalidOperationException($"获取自包含数据加密时间戳失败: {ex.Message}", ex);
+            }
+            finally
+            {
+                // 释放分配的内存
+                if (inputPtr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(inputPtr);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从双密钥系统加密文件中获取加密时间戳（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="filePath">加密文件路径</param>
+        /// <param name="privateKey">私钥字符串（用于验证）</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="timestamp">输出UTC时间戳</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是GetEncryptionTimestampFromFile的安全版本，不会抛出异常。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryGetEncryptionTimestampFromFile(string filePath, string privateKey, string publicKey, out long timestamp)
+        {
+            timestamp = 0;
+
+            try
+            {
+                timestamp = GetEncryptionTimestampFromFile(filePath, privateKey, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取文件加密时间戳失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 从双密钥系统加密数据中获取加密时间戳（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="privateKey">私钥字符串（用于验证）</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="timestamp">输出UTC时间戳</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是GetEncryptionTimestampFromData的安全版本，不会抛出异常。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryGetEncryptionTimestampFromData(byte[] encryptedData, string privateKey, string publicKey, out long timestamp)
+        {
+            timestamp = 0;
+
+            try
+            {
+                timestamp = GetEncryptionTimestampFromData(encryptedData, privateKey, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取数据加密时间戳失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密文件中获取加密时间戳（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="filePath">加密文件路径</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="timestamp">输出UTC时间戳</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是GetSelfContainedTimestampFromFile的安全版本，不会抛出异常。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryGetSelfContainedTimestampFromFile(string filePath, string publicKey, out long timestamp)
+        {
+            timestamp = 0;
+
+            try
+            {
+                timestamp = GetSelfContainedTimestampFromFile(filePath, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取自包含文件加密时间戳失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 从自包含式加密数据中获取加密时间戳（带错误处理的安全版本）
+        /// </summary>
+        /// <param name="encryptedData">加密数据字节数组</param>
+        /// <param name="publicKey">公钥字符串（用于验证）</param>
+        /// <param name="timestamp">输出UTC时间戳</param>
+        /// <returns>成功返回true，失败返回false</returns>
+        /// <remarks>
+        /// 此函数是GetSelfContainedTimestampFromData的安全版本，不会抛出异常。
+        /// 适用于需要优雅处理错误的场景。
+        /// </remarks>
+        public bool TryGetSelfContainedTimestampFromData(byte[] encryptedData, string publicKey, out long timestamp)
+        {
+            timestamp = 0;
+
+            try
+            {
+                timestamp = GetSelfContainedTimestampFromData(encryptedData, publicKey);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取自包含数据加密时间戳失败: {ex.Message}");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 获取当前UTC时间戳
+        /// </summary>
+        /// <returns>当前UTC时间戳（秒级精度）</returns>
+        /// <remarks>
+        /// 此函数返回从1970-01-01 00:00:00 UTC开始的秒数。
+        /// 可用于比较加密时间戳与当前时间的差异。
+        /// </remarks>
+        public long GetCurrentUTCTimestamp()
+        {
+            CheckDllLoaded();
+
+            try
+            {
+                var currentManager = GetCurrentDllManager();
+                return currentManager.GetCurrentUTCTimestamp();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取当前UTC时间戳错误: {ex.Message}");
+                throw new InvalidOperationException($"获取当前UTC时间戳失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 将UTC时间戳转换为本地DateTime对象
+        /// </summary>
+        /// <param name="timestamp">UTC时间戳（秒）</param>
+        /// <returns>对应的本地DateTime对象</returns>
+        /// <remarks>
+        /// 此辅助函数将UTC时间戳转换为本地时间的DateTime对象，便于显示和处理。
+        /// </remarks>
+        public static DateTime ConvertTimestampToLocalDateTime(long timestamp)
+        {
+            DateTime utcDateTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            utcDateTime = utcDateTime.AddSeconds(timestamp);
+            return utcDateTime.ToLocalTime();
+        }
+
+        /// <summary>
+        /// 将UTC时间戳转换为UTC DateTime对象
+        /// </summary>
+        /// <param name="timestamp">UTC时间戳（秒）</param>
+        /// <returns>对应的UTC DateTime对象</returns>
+        /// <remarks>
+        /// 此辅助函数将UTC时间戳转换为UTC时间的DateTime对象。
+        /// </remarks>
+        public static DateTime ConvertTimestampToUtcDateTime(long timestamp)
+        {
+            DateTime utcDateTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+            return utcDateTime.AddSeconds(timestamp);
+        }
     }
 }

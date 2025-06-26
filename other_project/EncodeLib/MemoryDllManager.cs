@@ -147,6 +147,42 @@ namespace EncodeLib
         public delegate int GetMachineFingerprintDelegate(
             [MarshalAs(UnmanagedType.LPStr)] System.Text.StringBuilder data);
 
+        // ========== 时间戳获取函数委托 ==========
+        
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetEncryptionTimestampFromFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string privateKey,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out long timestamp);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetEncryptionTimestampFromDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string privateKey,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out long timestamp);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetSelfContainedTimestampFromFileDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] string filePath,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out long timestamp);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetSelfContainedTimestampFromDataDelegate(
+            IntPtr inputData,
+            UIntPtr inputLength,
+            [MarshalAs(UnmanagedType.LPStr)] string publicKey,
+            out long timestamp);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate long GetCurrentUTCTimestampDelegate();
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate uint CalculateTimestampCRCDelegate(long timestamp);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -175,6 +211,14 @@ namespace EncodeLib
 
         // 硬件ID获取函数实例
         public GetMachineFingerprintDelegate GetMachineFingerprint { get; private set; }
+
+        // ========== 时间戳获取函数实例 ==========
+        public GetEncryptionTimestampFromFileDelegate GetEncryptionTimestampFromFile { get; private set; }
+        public GetEncryptionTimestampFromDataDelegate GetEncryptionTimestampFromData { get; private set; }
+        public GetSelfContainedTimestampFromFileDelegate GetSelfContainedTimestampFromFile { get; private set; }
+        public GetSelfContainedTimestampFromDataDelegate GetSelfContainedTimestampFromData { get; private set; }
+        public GetCurrentUTCTimestampDelegate GetCurrentUTCTimestamp { get; private set; }
+        public CalculateTimestampCRCDelegate CalculateTimestampCRC { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL到内存
@@ -261,6 +305,14 @@ namespace EncodeLib
 
                 // 硬件ID获取函数实例
                 GetMachineFingerprint = dllInstance.GetDelegateFromFuncName<GetMachineFingerprintDelegate>("GetMachineFingerprint");
+
+                // ========== 时间戳获取函数实例 ==========
+                GetEncryptionTimestampFromFile = dllInstance.GetDelegateFromFuncName<GetEncryptionTimestampFromFileDelegate>("GetEncryptionTimestampFromFile");
+                GetEncryptionTimestampFromData = dllInstance.GetDelegateFromFuncName<GetEncryptionTimestampFromDataDelegate>("GetEncryptionTimestampFromData");
+                GetSelfContainedTimestampFromFile = dllInstance.GetDelegateFromFuncName<GetSelfContainedTimestampFromFileDelegate>("GetSelfContainedTimestampFromFile");
+                GetSelfContainedTimestampFromData = dllInstance.GetDelegateFromFuncName<GetSelfContainedTimestampFromDataDelegate>("GetSelfContainedTimestampFromData");
+                GetCurrentUTCTimestamp = dllInstance.GetDelegateFromFuncName<GetCurrentUTCTimestampDelegate>("GetCurrentUTCTimestamp");
+                CalculateTimestampCRC = dllInstance.GetDelegateFromFuncName<CalculateTimestampCRCDelegate>("CalculateTimestampCRC");
             }
             catch (EntryPointNotFoundException ex)
             {

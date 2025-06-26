@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <process.h>
 #include <wincrypt.h>
+#include <time.h>
 
 // 加密算法相关常量定义
 #define BUFFER_SIZE 4096                   // 标准缓冲区大小
@@ -14,6 +15,8 @@
 #define CHUNK_SIZE 1024                    // 数据块大小
 #define MAX_THREADS 4                      // 最大线程数量
 #define DEFAULT_KEY_LENGTH 256             // 默认最大密钥长度
+#define TIMESTAMP_SIZE 8                   // 时间戳大小（64位）
+#define TIMESTAMP_CRC_SIZE 4               // 时间戳CRC校验大小（32位）
 
 // 函数执行结果状态码
 #define SUCCESS 0                          // 执行成功
@@ -293,6 +296,12 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
 	fwrite(&publicKeyHash, sizeof(unsigned int), 1, outputFile);
 
+	// 新增：写入加密时间戳和时间戳CRC
+	long long encryptionTimestamp = GetCurrentUTCTimestamp();
+	unsigned int timestampCRC = CalculateTimestampCRC(encryptionTimestamp);
+	fwrite(&encryptionTimestamp, sizeof(long long), 1, outputFile);
+	fwrite(&timestampCRC, sizeof(unsigned int), 1, outputFile);
+
 	// 初始进度回调通知
 	if (progressCallback) {
 		progressCallback(filePath, 0.0);
@@ -433,6 +442,23 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 		fclose(inputFile);
 		free(combinedKey);
 		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 新增：读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	if (fread(&encryptionTimestamp, sizeof(long long), 1, inputFile) != 1 ||
+		fread(&storedTimestampCRC, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		fclose(inputFile);
+		free(combinedKey);
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
 	}
 
 	// Validate key length (early validation)
@@ -684,8 +710,8 @@ int StreamEncryptData(const unsigned char* inputData, size_t inputLength, const 
 		return ERR_ENCRYPTION_FAILED;
 	}
 
-	// 计算输出数据大小：魔数头 + 密钥长度 + 公钥哈希 + 原始数据 + CRC32校验和
-	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int);
+	// 计算输出数据大小：魔数头 + 密钥长度 + 公钥哈希 + 时间戳 + 时间戳CRC + 原始数据 + CRC32校验和
+	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int);
 	size_t outputSize = headerSize + inputLength + sizeof(unsigned int);
 
 	// 分配输出缓冲区
@@ -711,6 +737,14 @@ int StreamEncryptData(const unsigned char* inputData, size_t inputLength, const 
 	// 写入公钥哈希值
 	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
 	memcpy(outPtr, &publicKeyHash, sizeof(unsigned int));
+	outPtr += sizeof(unsigned int);
+
+	// 写入加密时间戳和时间戳CRC
+	long long encryptionTimestamp = GetCurrentUTCTimestamp();
+	unsigned int timestampCRC = CalculateTimestampCRC(encryptionTimestamp);
+	memcpy(outPtr, &encryptionTimestamp, sizeof(long long));
+	outPtr += sizeof(long long);
+	memcpy(outPtr, &timestampCRC, sizeof(unsigned int));
 	outPtr += sizeof(unsigned int);
 
 	// 加密数据
@@ -757,7 +791,7 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 	*outputLength = 0;
 
 	// 检查数据最小长度
-	size_t minSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(unsigned int);
+	size_t minSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(unsigned int);
 	if (inputLength < minSize) {
 		return ERR_INVALID_HEADER;
 	}
@@ -809,6 +843,23 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 		return ERR_DECRYPTION_FAILED; // 公钥不匹配
 	}
 
+	// 读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	memcpy(&encryptionTimestamp, inPtr, sizeof(long long));
+	inPtr += sizeof(long long);
+	memcpy(&storedTimestampCRC, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
+	}
+
 	// 验证密钥长度
 	if (storedKeyLength != combinedKeyLength) {
 		if (combinedKey) {
@@ -819,7 +870,7 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 	}
 
 	// 计算数据区大小
-	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int);
+	size_t headerSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int);
 	size_t dataSize = inputLength - headerSize - sizeof(unsigned int);
 
 	// 验证校验和（从末尾读取）
@@ -1040,6 +1091,12 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
 	fwrite(&publicKeyHash, sizeof(unsigned int), 1, outputFile);
 
+	// 写入加密时间戳和时间戳CRC
+	long long encryptionTimestamp = GetCurrentUTCTimestamp();
+	unsigned int timestampCRC = CalculateTimestampCRC(encryptionTimestamp);
+	fwrite(&encryptionTimestamp, sizeof(long long), 1, outputFile);
+	fwrite(&timestampCRC, sizeof(unsigned int), 1, outputFile);
+
 	// 写入私钥长度和私钥数据
 	fwrite(&privateKeyLength, sizeof(int), 1, outputFile);
 	fwrite(privateKey, 1, privateKeyLength, outputFile);
@@ -1164,6 +1221,21 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 	if (storedPublicKeyHash != currentPublicKeyHash) {
 		fclose(inputFile);
 		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	if (fread(&encryptionTimestamp, sizeof(long long), 1, inputFile) != 1 ||
+		fread(&storedTimestampCRC, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
 	}
 
 	// 读取私钥长度
@@ -1415,8 +1487,8 @@ int SelfContainedEncryptData(const unsigned char* inputData, size_t inputLength,
 	combinedKey[totalLen] = '\0';
 	combinedKeyLength = totalLen;
 
-	// 计算输出大小
-	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
+	// 计算输出大小（包含时间戳和时间戳CRC）
+	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
 	size_t outputSize = headerSize + inputLength + sizeof(unsigned int);
 
 	// 分配输出缓冲区
@@ -1440,6 +1512,14 @@ int SelfContainedEncryptData(const unsigned char* inputData, size_t inputLength,
 
 	unsigned int publicKeyHash = CalculatePublicKeyHash(publicKey);
 	memcpy(outPtr, &publicKeyHash, sizeof(unsigned int));
+	outPtr += sizeof(unsigned int);
+
+	// 写入加密时间戳和时间戳CRC
+	long long encryptionTimestamp = GetCurrentUTCTimestamp();
+	unsigned int timestampCRC = CalculateTimestampCRC(encryptionTimestamp);
+	memcpy(outPtr, &encryptionTimestamp, sizeof(long long));
+	outPtr += sizeof(long long);
+	memcpy(outPtr, &timestampCRC, sizeof(unsigned int));
 	outPtr += sizeof(unsigned int);
 
 	memcpy(outPtr, &privateKeyLength, sizeof(int));
@@ -1495,8 +1575,8 @@ int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength,
 	*outputData = NULL;
 	*outputLength = 0;
 
-	// 检查最小长度
-	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int) + sizeof(unsigned int);
+	// 检查最小长度（包含时间戳和时间戳CRC）
+	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int) + sizeof(unsigned int);
 	if (inputLength < minSize) {
 		return ERR_INVALID_HEADER;
 	}
@@ -1523,6 +1603,19 @@ int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength,
 	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
 	if (storedPublicKeyHash != currentPublicKeyHash) {
 		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	memcpy(&encryptionTimestamp, inPtr, sizeof(long long));
+	inPtr += sizeof(long long);
+	memcpy(&storedTimestampCRC, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
 	}
 
 	// 读取私钥长度
@@ -1597,8 +1690,8 @@ int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength,
 		return ERR_DECRYPTION_FAILED;
 	}
 
-	// 计算数据大小
-	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
+	// 计算数据大小（包含时间戳和时间戳CRC）
+	size_t headerSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(int) + privateKeyLength + sizeof(unsigned int);
 	size_t dataSize = inputLength - headerSize - sizeof(unsigned int);
 
 	// 分配输出缓冲区
@@ -1986,6 +2079,422 @@ int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength
 	// 清理资源
 	SecureZeroMemory(privateKey, privateKeyLength);
 	free(privateKey);
+
+	return SUCCESS;
+}
+
+// ========== 时间戳辅助函数实现 ==========
+
+// 获取当前11位UTC时间戳
+long long GetCurrentUTCTimestamp() {
+	return (long long)time(NULL);
+}
+
+// 计算时间戳CRC32校验值
+unsigned int CalculateTimestampCRC(long long timestamp) {
+	return CalculateCRC32((const unsigned char*)&timestamp, sizeof(long long));
+}
+
+// 验证时间戳CRC完整性
+bool VerifyTimestampCRC(long long timestamp, unsigned int storedCRC) {
+	unsigned int calculatedCRC = CalculateTimestampCRC(timestamp);
+	return (calculatedCRC == storedCRC);
+}
+
+// ========== 时间戳获取函数实现 ==========
+
+// 从双密钥系统加密文件中获取加密时间戳
+int GetEncryptionTimestampFromFile(const char* filePath, const char* privateKey, const unsigned char* publicKey, long long* timestamp) {
+	FILE* inputFile = NULL;
+	unsigned char* combinedKey = NULL;
+	char header[MAGIC_HEADER_SIZE + 1];
+	int storedKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	if (!filePath || !privateKey || !publicKey || !timestamp) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化时间戳输出
+	*timestamp = 0;
+
+	// 临时设置私钥以进行验证
+	int originalPrivateKeySet = IsPrivateKeySet();
+	int initResult = InitStreamFile(privateKey);
+	if (initResult != SUCCESS) {
+		return initResult;
+	}
+
+	// 获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
+
+	if (!combinedKey || combinedKeyLength == 0) {
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 验证文件头
+	if (fread(header, 1, MAGIC_HEADER_SIZE, inputFile) != MAGIC_HEADER_SIZE) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+
+	header[MAGIC_HEADER_SIZE] = '\0';
+	if (strcmp(header, MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取存储的密钥长度
+	if (fread(&storedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证密钥长度
+	if (storedKeyLength != combinedKeyLength) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	if (fread(&storedPublicKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	if (fread(&encryptionTimestamp, sizeof(long long), 1, inputFile) != 1 ||
+		fread(&storedTimestampCRC, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		fclose(inputFile);
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 设置输出时间戳
+	*timestamp = encryptionTimestamp;
+
+	// 清理资源
+	fclose(inputFile);
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+	if (!originalPrivateKeySet) ClearPrivateKey();
+
+	return SUCCESS;
+}
+
+// 从双密钥系统加密数据中获取加密时间戳
+int GetEncryptionTimestampFromData(const unsigned char* inputData, size_t inputLength, const char* privateKey, const unsigned char* publicKey, long long* timestamp) {
+	unsigned char* combinedKey = NULL;
+	char header[MAGIC_HEADER_SIZE + 1];
+	int storedKeyLength = 0;
+	int combinedKeyLength = 0;
+
+	if (!inputData || inputLength == 0 || !privateKey || !publicKey || !timestamp) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化时间戳输出
+	*timestamp = 0;
+
+	// 检查最小长度
+	size_t minSize = MAGIC_HEADER_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(unsigned int);
+	if (inputLength < minSize) {
+		return ERR_INVALID_HEADER;
+	}
+
+	// 临时设置私钥以进行验证
+	int originalPrivateKeySet = IsPrivateKeySet();
+	int initResult = InitStreamFile(privateKey);
+	if (initResult != SUCCESS) {
+		return initResult;
+	}
+
+	// 获取组合密钥
+	EnterCriticalSection(&g_keySection);
+	combinedKey = CombineKeys(publicKey, &combinedKeyLength);
+	LeaveCriticalSection(&g_keySection);
+
+	if (!combinedKey || combinedKeyLength == 0) {
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	const unsigned char* inPtr = inputData;
+
+	// 验证魔数头
+	memcpy(header, inPtr, MAGIC_HEADER_SIZE);
+	header[MAGIC_HEADER_SIZE] = '\0';
+	if (strcmp(header, MAGIC_HEADER) != 0) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_INVALID_HEADER;
+	}
+	inPtr += MAGIC_HEADER_SIZE;
+
+	// 读取存储的密钥长度
+	memcpy(&storedKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	// 验证密钥长度
+	if (storedKeyLength != combinedKeyLength) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	memcpy(&storedPublicKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	memcpy(&encryptionTimestamp, inPtr, sizeof(long long));
+	inPtr += sizeof(long long);
+	memcpy(&storedTimestampCRC, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		if (combinedKey) {
+			SecureZeroMemory(combinedKey, combinedKeyLength);
+			free(combinedKey);
+		}
+		if (!originalPrivateKeySet) ClearPrivateKey();
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 设置输出时间戳
+	*timestamp = encryptionTimestamp;
+
+	// 清理资源
+	if (combinedKey) {
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(combinedKey);
+	}
+	if (!originalPrivateKeySet) ClearPrivateKey();
+
+	return SUCCESS;
+}
+
+// 从自包含式加密文件中获取加密时间戳
+int GetSelfContainedTimestampFromFile(const char* filePath, const unsigned char* publicKey, long long* timestamp) {
+	FILE* inputFile = NULL;
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+
+	if (!filePath || !publicKey || !timestamp) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化时间戳输出
+	*timestamp = 0;
+
+	// 打开输入文件
+	fopen_s(&inputFile, filePath, "rb");
+	if (!inputFile) {
+		return ERR_FILE_OPEN_FAILED;
+	}
+
+	// 读取并验证文件头
+	if (fread(header, 1, SELF_CONTAINED_MAGIC_SIZE, inputFile) != SELF_CONTAINED_MAGIC_SIZE) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 读取组合密钥长度
+	if (fread(&storedCombinedKeyLength, sizeof(int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证公钥哈希值
+	unsigned int storedPublicKeyHash;
+	if (fread(&storedPublicKeyHash, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 公钥不匹配
+	}
+
+	// 读取加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	if (fread(&encryptionTimestamp, sizeof(long long), 1, inputFile) != 1 ||
+		fread(&storedTimestampCRC, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
+	}
+
+	// 设置输出时间戳
+	*timestamp = encryptionTimestamp;
+
+	// 清理资源
+	fclose(inputFile);
+
+	return SUCCESS;
+}
+
+// 从自包含式加密数据中获取加密时间戳
+int GetSelfContainedTimestampFromData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, long long* timestamp) {
+	char header[SELF_CONTAINED_MAGIC_SIZE + 1];
+	int storedCombinedKeyLength = 0;
+
+	if (!inputData || inputLength == 0 || !publicKey || !timestamp) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化时间戳输出
+	*timestamp = 0;
+
+	// 检查最小长度
+	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int);
+	if (inputLength < minSize) {
+		return ERR_INVALID_HEADER;
+	}
+
+	const unsigned char* inPtr = inputData;
+
+	// 验证文件头
+	memcpy(header, inPtr, SELF_CONTAINED_MAGIC_SIZE);
+	header[SELF_CONTAINED_MAGIC_SIZE] = '\0';
+	if (strcmp(header, SELF_CONTAINED_MAGIC_HEADER) != 0) {
+		return ERR_INVALID_HEADER;
+	}
+	inPtr += SELF_CONTAINED_MAGIC_SIZE;
+
+	// 读取组合密钥长度
+	memcpy(&storedCombinedKeyLength, inPtr, sizeof(int));
+	inPtr += sizeof(int);
+
+	// 验证公钥哈希
+	unsigned int storedPublicKeyHash;
+	memcpy(&storedPublicKeyHash, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
+	if (storedPublicKeyHash != currentPublicKeyHash) {
+		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	memcpy(&encryptionTimestamp, inPtr, sizeof(long long));
+	inPtr += sizeof(long long);
+	memcpy(&storedTimestampCRC, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
+	}
+
+	// 设置输出时间戳
+	*timestamp = encryptionTimestamp;
 
 	return SUCCESS;
 }

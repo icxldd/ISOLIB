@@ -870,6 +870,130 @@ namespace TestWin
                 MessageBox.Show($"打开自包含式加密测试界面失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        /// <summary>
+        /// 获取加密时间戳按钮点击事件
+        /// </summary>
+        private void button9_Click(object sender, EventArgs e)
+        {
+            if (!CheckEncodeLibLoaded()) return;
+
+            try
+            {
+                string input = textBox1.Text.Trim();
+                string privateKey = "MIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQCOqkBwrg6Fq60Wt+wzgJDZCWJnFJYgVXKPhHzyGW0LdHQS3KBgfWSQaslovYoHO60znx4w/+kToGnHP4GPstXrsOKhz/i3mByA/FNkEWPheSbBVpS2pQFl6FBijYJaJYgzXRzziEO2Tj54aLMGf9jW3mhHQm4BfK03tppi/hoV4LPJC1DmWQ9G8xZky+ZpsL8YEc1YcpR3O57KH/RAGwDgTXpVgJ2dCkA0BRknvcMfViNZcYh1bEKy+AURdS8hJ3JdUiK2dVm+q090xOSon7sjsfkCL3ZEaKHzPPRMqx1LTKQGa/SDjhZv0wFibprw1CkLmLH3i7Wdu9A0N8WqbrRjAgMBAAECggEAZhYN5pOmcKBYS1lw+6mT/LpqX7irdJewUmJLxjHLhdbe+GBHosQXof/H/9shWeuqFLZXtFhrQFAZYSpgW6Ns0CrTAVcAct+2BdaJFaIcBsvan56E6+1HAtUqMFtyW29f9uE6RknLqjhzG1ZQROZXE+oyVEuEzCubB7Ly5sNNhzkhycOhE3VgCcVD+laDrw9wWTnuJ+ur5ffaHP4qFZ7zPOmIe4ZjFI/iWebFomEJnepFqQmCAQH74i40xpdH5TFGNfGlYB5yBkLkNsYJFRaW2qWSEzAviHyZVeQnTEFKNif2g0p0td5kBxSt09LoO1mX4hkHtlbCxxrSNKjJDudOAQKBgQDFMFHguUYYHGE8BdgICBD1dqWEdg4iwx4jDwAxJG0SikWOutVf41aYp6YLBJcJ+K0PtwQMr9hdXYfeP7efO0YM1BNzColisAhHpdp1jMTUttIczhhyjo5rjWl5qvjnLhJiQB0R2PQ7r7SvGGNYZVfgLqv7yXjO6Bb/+PmjSY/mUQKBgQC5NvV4b1Tjx+5ysqgRAmd0gw8jOtD9WtS6ERxnjYY6sht0ndHEQo0C8TOmEBMBeeBYRHO2O9E6HstMhmK8Bmi2/Ksae0BTcIVG52co0zArEcvKE2ldA5uqX+aI9BmtNVJ4CkFNvwWrCCDT29BprwYXzNlEo3hX1FBj17MvcBDecwKBgAtVjq9DFwNVxkUD9PnpNMhXLIZjnsZivr23JASvGlHhfsQIezFKyPR3VnT1q5TYJWJs25+7D822DZQ5x10wtAMSwZdwOJtikOdFYjw1fi7X31XmhsM27HrEIxbqO+pV3JqnIsSe2tL/c3xJA5TWJmntZNdRKk+CSagm8HpxRQMxAoGASrMfzbMZScUZJqlnn3SYxSUWtd7C62v24BSGoD00JfgvmpkMQVuWA9nEOvXAtJezI+Z3xMfbWtWQqQyKRctP8H13hPawuvZmynIJ6S1EABrtVlL968XIwq5rDFFnCbS3zjJUpEamwpREqS2+oOE2U+MKveQwZTv8MEiOvFM2eoECgYA+ZpQ2eAQf4CTHOXYjJtp7kcyG1lfJ5l5bEwwtSvexGBMCtGhnDaBcnBid2jv8vjBoB4WEcgehg1K4atmqjqhJtOn/iy7WGwhoPXmZ0SNKVjDP0P1Q9VrKXgNNcxxbcN8VkbN23TCZDxVn813+7JO8UjiY05Evinwd85E7y7009Q=="; // 使用预设的私钥
+                string publicKey = textBox2.Text.Trim();
+
+                // 验证输入
+                if (string.IsNullOrEmpty(input))
+                {
+                    MessageBox.Show("请输入文件路径或加密数据！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(publicKey))
+                {
+                    MessageBox.Show("请输入公钥！", "提示", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                richTextBox1.Clear();
+                richTextBox1.AppendText("=== 获取双密钥系统加密时间戳 ===\r\n");
+                richTextBox1.AppendText($"输入内容: {(input.Length > 50 ? input.Substring(0, 50) + "..." : input)}\r\n");
+                richTextBox1.AppendText($"公钥: {publicKey}\r\n");
+
+                long timestamp = 0;
+                bool success = false;
+
+                // 判断输入是文件路径还是数据
+                if (System.IO.File.Exists(input))
+                {
+                    // 作为文件路径处理
+                    richTextBox1.AppendText("检测到文件路径，使用文件时间戳获取方法...\r\n");
+                    
+                    if (EncodeLibManager.Instance.TryGetEncryptionTimestampFromFile(input, privateKey, publicKey, out timestamp))
+                    {
+                        success = true;
+                        richTextBox1.AppendText("✅ 文件时间戳获取成功！\r\n");
+                    }
+                    else
+                    {
+                        richTextBox1.AppendText("✗ 文件时间戳获取失败！可能不是有效的加密文件或密钥不匹配。\r\n");
+                    }
+                }
+                else
+                {
+                    // 作为Base64数据处理
+                    richTextBox1.AppendText("作为加密数据处理，使用数据时间戳获取方法...\r\n");
+                    
+                    try
+                    {
+                        // 验证是否为Base64格式
+                        byte[] dataBytes = Convert.FromBase64String(input);
+                        richTextBox1.AppendText($"Base64解码成功，数据长度: {dataBytes.Length} 字节\r\n");
+                        
+                        if (EncodeLibManager.Instance.TryGetEncryptionTimestampFromData(dataBytes, privateKey, publicKey, out timestamp))
+                        {
+                            success = true;
+                            richTextBox1.AppendText("✅ 数据时间戳获取成功！\r\n");
+                        }
+                        else
+                        {
+                            richTextBox1.AppendText("✗ 数据时间戳获取失败！可能不是有效的加密数据或密钥不匹配。\r\n");
+                        }
+                    }
+                    catch (FormatException)
+                    {
+                        richTextBox1.AppendText("✗ 输入既不是有效的文件路径，也不是有效的Base64数据！\r\n");
+                    }
+                }
+
+                if (success)
+                {
+                    // 转换时间戳为可读格式
+                    DateTime encryptionTime = EncodeLibManager.ConvertTimestampToUtcDateTime(timestamp);
+                    DateTime localTime = EncodeLibManager.ConvertTimestampToLocalDateTime(timestamp);
+                    
+                    richTextBox1.AppendText("\r\n=== 加密时间信息 ===\r\n");
+                    richTextBox1.AppendText($"🕐 UTC时间戳: {timestamp}\r\n");
+                    richTextBox1.AppendText($"🌍 UTC时间: {encryptionTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    richTextBox1.AppendText($"🏠 本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\r\n");
+                    
+                    // 计算时间差
+                    TimeSpan timeDiff = DateTime.Now - localTime;
+                    richTextBox1.AppendText($"⏱️ 距离现在: {FormatTimeSpan(timeDiff)}\r\n");
+
+                    string timeInfo = $"加密时间戳获取成功！\n\nUTC时间戳: {timestamp}\nUTC时间: {encryptionTime:yyyy-MM-dd HH:mm:ss}\n本地时间: {localTime:yyyy-MM-dd HH:mm:ss}\n距离现在: {FormatTimeSpan(timeDiff)}";
+                    MessageBox.Show(timeInfo, "时间戳信息", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    MessageBox.Show("获取加密时间戳失败！请检查输入的文件或数据是否为有效的双密钥系统加密内容，以及密钥是否正确。", "获取失败", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                richTextBox1.AppendText($"\r\n✗ 获取时间戳异常: {ex.Message}\r\n");
+                MessageBox.Show($"获取加密时间戳时发生异常: {ex.Message}", "异常", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        /// <summary>
+        /// 格式化时间跨度为易读字符串
+        /// </summary>
+        /// <param name="timeSpan">时间跨度</param>
+        /// <returns>格式化后的字符串</returns>
+        private string FormatTimeSpan(TimeSpan timeSpan)
+        {
+            if (timeSpan.TotalDays >= 1)
+                return $"{(int)timeSpan.TotalDays}天{timeSpan.Hours}小时{timeSpan.Minutes}分钟";
+            else if (timeSpan.TotalHours >= 1)
+                return $"{timeSpan.Hours}小时{timeSpan.Minutes}分钟";
+            else if (timeSpan.TotalMinutes >= 1)
+                return $"{timeSpan.Minutes}分钟{timeSpan.Seconds}秒";
+            else
+                return $"{timeSpan.Seconds}秒";
+        }
     }
 
     public static class StructBaseExtensions

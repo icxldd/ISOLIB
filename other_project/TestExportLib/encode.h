@@ -160,4 +160,49 @@ extern "C" {
 	// 返回值: 私钥哈希值
 	PDUDLL_API unsigned int CalculatePrivateKeyHash(const unsigned char* privateKey, int keyLength);
 
+	// ========== 时间戳获取函数 ==========
+	
+	// 从双密钥系统加密文件中获取加密时间戳
+	// filePath: 加密文件路径
+	// privateKey: 私钥字符串（用于验证）
+	// publicKey: 公钥（用于验证）
+	// timestamp: 输出11位UTC时间戳
+	// 返回值: 0表示成功，负数表示错误码
+	PDUDLL_API int GetEncryptionTimestampFromFile(const char* filePath, const char* privateKey, const unsigned char* publicKey, long long* timestamp);
+
+	// 从双密钥系统加密数据中获取加密时间戳
+	// inputData: 输入加密数据指针
+	// inputLength: 输入数据长度
+	// privateKey: 私钥字符串（用于验证）
+	// publicKey: 公钥（用于验证）
+	// timestamp: 输出11位UTC时间戳
+	// 返回值: 0表示成功，负数表示错误码
+	PDUDLL_API int GetEncryptionTimestampFromData(const unsigned char* inputData, size_t inputLength, const char* privateKey, const unsigned char* publicKey, long long* timestamp);
+
+	// 从自包含式加密文件中获取加密时间戳
+	// filePath: 加密文件路径
+	// publicKey: 公钥（用于验证）
+	// timestamp: 输出11位UTC时间戳
+	// 返回值: 0表示成功，负数表示错误码
+	PDUDLL_API int GetSelfContainedTimestampFromFile(const char* filePath, const unsigned char* publicKey, long long* timestamp);
+
+	// 从自包含式加密数据中获取加密时间戳
+	// inputData: 输入加密数据指针
+	// inputLength: 输入数据长度
+	// publicKey: 公钥（用于验证）
+	// timestamp: 输出11位UTC时间戳
+	// 返回值: 0表示成功，负数表示错误码
+	PDUDLL_API int GetSelfContainedTimestampFromData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, long long* timestamp);
+
+	// ========== 时间戳辅助函数 ==========
+	bool VerifyTimestampCRC(long long timestamp, unsigned int storedCRC);
+	// 获取当前11位UTC时间戳
+	// 返回值: 当前UTC时间戳（秒级精度）
+	PDUDLL_API long long GetCurrentUTCTimestamp();
+
+	// 计算时间戳CRC32校验值
+	// timestamp: 时间戳值
+	// 返回值: 时间戳的CRC32校验值
+	PDUDLL_API unsigned int CalculateTimestampCRC(long long timestamp);
+
 }
