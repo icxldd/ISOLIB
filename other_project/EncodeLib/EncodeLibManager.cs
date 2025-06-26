@@ -104,7 +104,7 @@ namespace EncodeLib
                 // 可能的DLL文件名
                 string[] dllNames = {
                     GlobalData.DLL_NAME,
-                    GlobalData.DLL_NAME_BACKUP
+                    //GlobalData.DLL_NAME_BACKUP
                 };
 
                 byte[] dllBytes = null;
