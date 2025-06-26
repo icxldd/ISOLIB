@@ -1925,6 +1925,21 @@ int ExtractPrivateKeyFromFile(const char* filePath, const unsigned char* publicK
 		return ERR_DECRYPTION_FAILED; // 公钥不匹配
 	}
 
+	// 读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	if (fread(&encryptionTimestamp, sizeof(long long), 1, inputFile) != 1 ||
+		fread(&storedTimestampCRC, sizeof(unsigned int), 1, inputFile) != 1) {
+		fclose(inputFile);
+		return ERR_INVALID_HEADER;
+	}
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		fclose(inputFile);
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
+	}
+
 	// 读取私钥长度
 	if (fread(&privateKeyLength, sizeof(int), 1, inputFile) != 1) {
 		fclose(inputFile);
@@ -2003,8 +2018,8 @@ int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength
 	// 初始化输出参数
 	*extractedPrivateKey = NULL;
 
-	// 检查最小长度
-	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int);
+	// 检查最小长度（包含时间戳和时间戳CRC）
+	size_t minSize = SELF_CONTAINED_MAGIC_SIZE + sizeof(int) + sizeof(unsigned int) + sizeof(long long) + sizeof(unsigned int) + sizeof(int) + PRIVATE_KEY_SIZE_2048_BITS + sizeof(unsigned int);
 	if (inputLength < minSize) {
 		return ERR_INVALID_HEADER;
 	}
@@ -2031,6 +2046,19 @@ int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength
 	unsigned int currentPublicKeyHash = CalculatePublicKeyHash(publicKey);
 	if (storedPublicKeyHash != currentPublicKeyHash) {
 		return ERR_DECRYPTION_FAILED;
+	}
+
+	// 读取并验证加密时间戳
+	long long encryptionTimestamp;
+	unsigned int storedTimestampCRC;
+	memcpy(&encryptionTimestamp, inPtr, sizeof(long long));
+	inPtr += sizeof(long long);
+	memcpy(&storedTimestampCRC, inPtr, sizeof(unsigned int));
+	inPtr += sizeof(unsigned int);
+
+	// 验证时间戳CRC完整性
+	if (!VerifyTimestampCRC(encryptionTimestamp, storedTimestampCRC)) {
+		return ERR_DECRYPTION_FAILED; // 时间戳被篡改
 	}
 
 	// 读取私钥长度
