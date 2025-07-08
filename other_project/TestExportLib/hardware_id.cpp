@@ -334,43 +334,110 @@ int GetBIOSID(char* biosId, int maxLen) {
     return -3; // 查询失败
 }
 
-// 生成机器指纹（基于CPU ID）- 修复稳定性问题
+// 生成机器指纹（基于多个硬件标识符）- 修复唯一性问题
 int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
     if (!fingerprint || maxLen <= 0) return -1;
 
     char cpuId[256] = { 0 };
+    char macAddr[256] = { 0 };
+    char diskId[256] = { 0 };
+    char motherboardId[256] = { 0 };
+    char biosId[256] = { 0 };
+    char systemUuid[256] = { 0 };
 
-    // 获取CPU ID - 最可靠的硬件标识符
-    if (GetCPUID(cpuId, sizeof(cpuId)) != 0 || strlen(cpuId) == 0) {
-        return -3; // CPU ID获取失败
+    // 获取多个硬件标识符
+    GetCPUID(cpuId, sizeof(cpuId));
+    GetMACAddress(macAddr, sizeof(macAddr));
+    GetHardDiskID(diskId, sizeof(diskId));
+    GetMotherboardID(motherboardId, sizeof(motherboardId));
+    GetBIOSID(biosId, sizeof(biosId));
+    GetSystemUUID(systemUuid, sizeof(systemUuid));
+
+    // 至少需要有一个有效的硬件标识符
+    if (strlen(cpuId) == 0 && strlen(macAddr) == 0 && strlen(diskId) == 0 && 
+        strlen(motherboardId) == 0 && strlen(biosId) == 0 && strlen(systemUuid) == 0) {
+        return -3; // 没有获取到任何硬件标识符
     }
 
-    // 使用CPU ID生成指纹
-    char combined[512] = { 0 };
-    sprintf_s(combined, sizeof(combined), "CPU:%s", cpuId);
-
-    // 使用简单稳定的哈希算法 - 避免复杂的多重哈希导致不稳定
-    unsigned long long hash = 0x9e3779b97f4a7c15ULL; // 固定种子值
+    // 组合多个硬件标识符（只使用成功获取的）
+    char combined[2048] = { 0 };
+    char temp[64] = { 0 };
     
-    // 单一稳定的哈希算法 - DJB2变种
+    if (strlen(cpuId) > 0) {
+        strcat_s(combined, sizeof(combined), "CPU:");
+        strcat_s(combined, sizeof(combined), cpuId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(macAddr) > 0) {
+        strcat_s(combined, sizeof(combined), "MAC:");
+        strcat_s(combined, sizeof(combined), macAddr);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(diskId) > 0) {
+        strcat_s(combined, sizeof(combined), "DISK:");
+        strcat_s(combined, sizeof(combined), diskId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(motherboardId) > 0) {
+        strcat_s(combined, sizeof(combined), "MB:");
+        strcat_s(combined, sizeof(combined), motherboardId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(biosId) > 0) {
+        strcat_s(combined, sizeof(combined), "BIOS:");
+        strcat_s(combined, sizeof(combined), biosId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(systemUuid) > 0) {
+        strcat_s(combined, sizeof(combined), "UUID:");
+        strcat_s(combined, sizeof(combined), systemUuid);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+
+    // 如果组合字符串为空，使用当前时间戳作为备选
+    if (strlen(combined) == 0) {
+        sprintf_s(combined, sizeof(combined), "FALLBACK:%lld", 
+            (long long)GetTickCount64());
+    }
+
+    // 使用改进的哈希算法 - 提高唯一性
+    unsigned long long hash1 = 0x9e3779b97f4a7c15ULL; // 种子1
+    unsigned long long hash2 = 0x517cc1b727220a95ULL; // 种子2
+    
+    // 双重哈希算法
     int len = strlen(combined);
     for (int i = 0; i < len; i++) {
-        hash = ((hash << 5) + hash) + (unsigned char)combined[i];
+        // 第一个哈希 - DJB2变种
+        hash1 = ((hash1 << 5) + hash1) + (unsigned char)combined[i];
+        // 第二个哈希 - SDBM变种
+        hash2 = (unsigned char)combined[i] + (hash2 << 6) + (hash2 << 16) - hash2;
     }
     
-    // 简单的位操作增强随机性
-    hash ^= (hash >> 32);
-    hash *= 0x9e3779b97f4a7c15ULL;
-    hash ^= (hash >> 32);
+    // 混合两个哈希值
+    hash1 ^= (hash1 >> 32);
+    hash1 *= 0x9e3779b97f4a7c15ULL;
+    hash1 ^= (hash1 >> 32);
+    
+    hash2 ^= (hash2 >> 32);
+    hash2 *= 0x517cc1b727220a95ULL;
+    hash2 ^= (hash2 >> 32);
+    
+    // 组合两个哈希值
+    unsigned long long finalHash = hash1 ^ hash2;
 
     // 生成稳定的指纹格式：XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
     sprintf_s(fingerprint, maxLen, "%08X-%04X-%04X-%04X-%08X%04X",
-        (unsigned int)(hash & 0xFFFFFFFF),
-        (unsigned short)((hash >> 32) & 0xFFFF),
-        (unsigned short)((hash >> 16) & 0xFFFF),
-        (unsigned short)((hash >> 48) & 0xFFFF),
-        (unsigned int)((hash >> 8) & 0xFFFFFFFF),
-        (unsigned short)(hash & 0xFFFF));
+        (unsigned int)(finalHash & 0xFFFFFFFF),
+        (unsigned short)((finalHash >> 32) & 0xFFFF),
+        (unsigned short)((finalHash >> 16) & 0xFFFF),
+        (unsigned short)((finalHash >> 48) & 0xFFFF),
+        (unsigned int)((hash1 >> 8) & 0xFFFFFFFF),
+        (unsigned short)(hash2 & 0xFFFF));
 
     return 0; // 成功
 }
