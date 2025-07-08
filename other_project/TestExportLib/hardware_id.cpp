@@ -19,9 +19,10 @@ private:
     IWbemLocator* pLoc;
     IWbemServices* pSvc;
     bool initialized;
+    bool comInitialized; // 标记是否由我们初始化COM
 
 public:
-    WMIHelper() : pLoc(nullptr), pSvc(nullptr), initialized(false) {
+    WMIHelper() : pLoc(nullptr), pSvc(nullptr), initialized(false), comInitialized(false) {
         Initialize();
     }
 
@@ -32,14 +33,26 @@ public:
     bool Initialize() {
         HRESULT hres;
 
-        // 初始化COM库
+        // 尝试初始化COM库，但如果已经初始化则继续
         hres = CoInitializeEx(0, COINIT_MULTITHREADED);
-        if (FAILED(hres)) {
-            return false;
+        if (SUCCEEDED(hres)) {
+            comInitialized = true; // 我们成功初始化了COM
+        } else if (hres == RPC_E_CHANGED_MODE) {
+            // COM已经以不同模式初始化，尝试单线程模式
+            hres = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
+            if (SUCCEEDED(hres)) {
+                comInitialized = true;
+            } else {
+                // COM可能已经初始化，继续尝试使用现有状态
+                comInitialized = false;
+            }
+        } else {
+            // COM可能已经初始化，继续尝试使用现有状态
+            comInitialized = false;
         }
 
-        // 设置COM安全级别
-        hres = CoInitializeSecurity(
+        // 尝试设置COM安全级别（可能失败，但不是致命的）
+        CoInitializeSecurity(
             NULL,
             -1,                          // COM认证
             NULL,                        // 认证服务
@@ -51,11 +64,6 @@ public:
             NULL                         // 保留
         );
 
-        if (FAILED(hres)) {
-            CoUninitialize();
-            return false;
-        }
-
         // 创建WMI定位器
         hres = CoCreateInstance(
             CLSID_WbemLocator,
@@ -64,7 +72,10 @@ public:
             IID_IWbemLocator, (LPVOID*)&pLoc);
 
         if (FAILED(hres)) {
-            CoUninitialize();
+            if (comInitialized) {
+                CoUninitialize();
+                comInitialized = false;
+            }
             return false;
         }
 
@@ -82,7 +93,11 @@ public:
 
         if (FAILED(hres)) {
             pLoc->Release();
-            CoUninitialize();
+            pLoc = nullptr;
+            if (comInitialized) {
+                CoUninitialize();
+                comInitialized = false;
+            }
             return false;
         }
 
@@ -100,8 +115,13 @@ public:
 
         if (FAILED(hres)) {
             pSvc->Release();
+            pSvc = nullptr;
             pLoc->Release();
-            CoUninitialize();
+            pLoc = nullptr;
+            if (comInitialized) {
+                CoUninitialize();
+                comInitialized = false;
+            }
             return false;
         }
 
@@ -110,9 +130,19 @@ public:
     }
 
     void Cleanup() {
-        if (pSvc) pSvc->Release();
-        if (pLoc) pLoc->Release();
-        CoUninitialize();
+        if (pSvc) {
+            pSvc->Release();
+            pSvc = nullptr;
+        }
+        if (pLoc) {
+            pLoc->Release();
+            pLoc = nullptr;
+        }
+        // 只有当我们初始化COM时才调用CoUninitialize
+        if (comInitialized) {
+            CoUninitialize();
+            comInitialized = false;
+        }
         initialized = false;
     }
 
@@ -345,13 +375,49 @@ int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
     char biosId[256] = { 0 };
     char systemUuid[256] = { 0 };
 
-    // 获取多个硬件标识符
+    // 首先获取不需要COM的硬件信息
     GetCPUID(cpuId, sizeof(cpuId));
     GetMACAddress(macAddr, sizeof(macAddr));
-    GetHardDiskID(diskId, sizeof(diskId));
-    GetMotherboardID(motherboardId, sizeof(motherboardId));
-    GetBIOSID(biosId, sizeof(biosId));
-    GetSystemUUID(systemUuid, sizeof(systemUuid));
+
+    // 使用独立的作用域确保WMI资源立即释放
+    {
+        WMIHelper wmi;
+        if (wmi.IsInitialized()) {
+            IWbemServices* pSvc = wmi.GetService();
+            
+            // 快速批量获取所有WMI信息
+            // 获取硬盘序列号
+            const wchar_t* diskQuery = L"SELECT SerialNumber FROM Win32_PhysicalMedia WHERE Tag LIKE '%PHYSICALDRIVE0%'";
+            if (GetWMIStringValue(pSvc, diskQuery, L"SerialNumber", diskId, sizeof(diskId))) {
+                // 移除空格
+                char* src = diskId;
+                char* dst = diskId;
+                while (*src) {
+                    if (*src != ' ') {
+                        *dst++ = *src;
+                    }
+                    src++;
+                }
+                *dst = '\0';
+            }
+            
+            // 获取主板序列号
+            const wchar_t* mbQuery = L"SELECT SerialNumber FROM Win32_BaseBoard";
+            GetWMIStringValue(pSvc, mbQuery, L"SerialNumber", motherboardId, sizeof(motherboardId));
+            
+            // 获取BIOS序列号
+            const wchar_t* biosQuery = L"SELECT SerialNumber FROM Win32_BIOS";
+            GetWMIStringValue(pSvc, biosQuery, L"SerialNumber", biosId, sizeof(biosId));
+            
+            // 获取系统UUID
+            const wchar_t* uuidQuery = L"SELECT UUID FROM Win32_ComputerSystemProduct";
+            GetWMIStringValue(pSvc, uuidQuery, L"UUID", systemUuid, sizeof(systemUuid));
+        }
+        // WMIHelper析构函数会在这里自动调用，完全清理COM资源
+    }
+
+    // 强制COM清理（额外保险）
+    CoFreeUnusedLibraries();
 
     // 至少需要有一个有效的硬件标识符
     if (strlen(cpuId) == 0 && strlen(macAddr) == 0 && strlen(diskId) == 0 && 
@@ -361,7 +427,6 @@ int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
 
     // 组合多个硬件标识符（只使用成功获取的）
     char combined[2048] = { 0 };
-    char temp[64] = { 0 };
     
     if (strlen(cpuId) > 0) {
         strcat_s(combined, sizeof(combined), "CPU:");
