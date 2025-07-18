@@ -305,7 +305,9 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 高效双层XOR + 半字节交换加密算法（替代位旋转）
 		for (size_t i = 0; i < bytesRead; i++) {
-			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 使用全局位置计算密钥索引，确保与StreamDecryptData一致
+			__int64 globalIndex = totalProcessed + i;
+			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
 			unsigned char a1 = buffer[i];                                    // 原始字节
 			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR
 			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换
@@ -508,7 +510,9 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 
 		// 高效双层XOR + 半字节交换解密算法（与加密算法相同，自逆操作）
 		for (size_t i = 0; i < bytesRead; i++) {
-			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 使用全局位置计算密钥索引，确保与StreamEncryptFile一致
+			__int64 globalIndex = totalProcessed + i;
+			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
 			unsigned char a1 = buffer[i];                                    // 加密字节
 			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR（逆向第二次XOR）
 			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换（自逆操作）
@@ -1060,7 +1064,9 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 使用相同的双层XOR + 半字节交换加密算法
 		for (size_t i = 0; i < bytesRead; i++) {
-			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 使用全局位置计算密钥索引，确保一致性
+			__int64 globalIndex = totalProcessed + i;
+			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
 			unsigned char a1 = buffer[i];
 			unsigned char a2 = a1 ^ keyByte;
 			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
@@ -1314,7 +1320,9 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 
 		// 使用相同的双层XOR + 半字节交换解密算法
 		for (size_t i = 0; i < bytesRead; i++) {
-			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			// 使用全局位置计算密钥索引，确保一致性
+			__int64 globalIndex = totalProcessed + i;
+			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
 			unsigned char a1 = buffer[i];
 			unsigned char a2 = a1 ^ keyByte;
 			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
