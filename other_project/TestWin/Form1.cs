@@ -914,6 +914,29 @@ namespace TestWin
             //textBox1.Text = decryptedText;
 
         }
+
+        private void button10_Click(object sender, EventArgs e)
+        {
+            //textBox3
+
+           int a = EncodeLibManager.Instance.InitializePrivateKey(textBox3.Text);
+
+            if (a==0)
+            {
+                MessageBox.Show("私钥成功设置！"+ textBox3.Text);
+            }
+
+        }
+
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void button11_Click(object sender, EventArgs e)
+        {
+
+        }
     }
 
     public static class StructBaseExtensions
