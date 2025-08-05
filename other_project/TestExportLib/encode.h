@@ -15,6 +15,30 @@ typedef void (*ProgressCallback)(const char* filePath, double progress);
 
 extern "C" {
 
+	// ========== 多线程配置函数 ==========
+
+	/// @brief 设置加解密使用的线程数量
+	/// @param threadCount 线程数量（1-16之间，默认为5）
+	/// @return 0表示成功，负数表示错误码
+	PDUDLL_API int SetThreadCount(int threadCount);
+
+	/// @brief 获取当前设置的线程数量
+	/// @return 当前线程数量
+	PDUDLL_API int GetThreadCount();
+
+	/// @brief 启用或禁用多线程处理
+	/// @param enabled 1表示启用多线程，0表示禁用多线程（默认启用）
+	/// @return 0表示成功，负数表示错误码
+	PDUDLL_API int EnableMultiThreading(int enabled);
+
+	/// @brief 检查多线程是否启用
+	/// @return 1表示启用，0表示禁用
+	PDUDLL_API int IsMultiThreadingEnabled();
+
+	/// @brief 清理库资源（在程序退出或DLL卸载时调用）
+	/// @note 此函数会清理所有临界区和私钥，建议在程序退出前调用
+	PDUDLL_API void CleanupEncryptionLibrary();
+
 	/// @brief 使用私钥初始化加密系统
 	/// @param privateKey 私钥字符串（支持任意长度）
 	/// @return 0表示成功，负数表示错误码
@@ -82,7 +106,7 @@ extern "C" {
 	PDUDLL_API unsigned int CalculatePublicKeyHash(const unsigned char* publicKey);
 
 	// ========== 自包含式加密/解密函数（无需预设私钥） ==========
-	
+
 	// 自包含式文件加密函数（自动生成2048位私钥）
 	// filePath: 输入文件路径
 	// outputPath: 输出文件路径
@@ -128,7 +152,7 @@ extern "C" {
 	PDUDLL_API int ValidateSelfContainedFile(const char* filePath, const unsigned char* publicKey);
 
 	// ========== 私钥提取函数 ==========
-	
+
 	// 从自包含式加密文件中提取私钥
 	// filePath: 加密文件路径
 	// publicKey: 公钥（用于验证）
@@ -147,7 +171,7 @@ extern "C" {
 	PDUDLL_API int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength, const unsigned char* publicKey, char** extractedPrivateKey);
 
 	// ========== 内部辅助函数 ==========
-	
+
 	// 生成2048位随机私钥
 	// privateKey: 输出私钥缓冲区（调用者分配，至少256字节）
 	// keyLength: 输出实际密钥长度

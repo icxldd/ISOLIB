@@ -12,8 +12,11 @@
 #define MAGIC_HEADER "ENCV1.0"             // 加密文件魔数头标识
 #define MAGIC_HEADER_SIZE 7                // 魔数头大小
 #define CHUNK_SIZE 1024                    // 数据块大小
-#define MAX_THREADS 4                      // 最大线程数量
+#define MAX_THREADS 16                     // 最大线程数量（修改为16）
 #define DEFAULT_KEY_LENGTH 256             // 默认最大密钥长度
+#define MIN_THREAD_COUNT 1                 // 最小线程数量
+#define DEFAULT_THREAD_COUNT 16             // 默认线程数量
+#define MIN_CHUNK_SIZE_FOR_THREADING (1024 * 1024)  // 最小启用多线程的块大小（1MB）
 
 // 函数执行结果状态码
 #define SUCCESS 0                          // 执行成功
@@ -26,11 +29,259 @@
 #define ERR_INVALID_PARAMETER -7          // 无效参数
 #define ERR_PRIVATE_KEY_NOT_SET -8        // 私钥未设置
 
+// ========== 多线程相关数据结构 ==========
+
+// 线程工作数据结构
+typedef struct {
+	unsigned char* inputBuffer;        // 输入数据缓冲区
+	unsigned char* outputBuffer;       // 输出数据缓冲区
+	size_t dataSize;                   // 数据块大小
+	__int64 globalOffset;              // 在整个文件中的全局偏移量
+	unsigned char* combinedKey;        // 组合密钥
+	int combinedKeyLength;             // 组合密钥长度
+	int threadIndex;                   // 线程索引
+	int result;                        // 处理结果
+	HANDLE completionEvent;            // 完成事件
+} ThreadWorkData;
+
+// 多线程处理上下文
+typedef struct {
+	ThreadWorkData* workData;          // 工作数据数组
+	HANDLE* threadHandles;             // 线程句柄数组
+	int threadCount;                   // 实际使用的线程数量
+	size_t totalSize;                  // 总数据大小
+	bool isEncryption;                 // 是否为加密操作（true=加密，false=解密）
+} MultiThreadContext;
+
+// ========== 多线程配置全局变量 ==========
+static int g_threadCount = DEFAULT_THREAD_COUNT;
+static CRITICAL_SECTION g_threadSection;
+static bool g_threadInitialized = false;
+static bool g_multiThreadingEnabled = true;  // 默认启用多线程（已修复问题）
+
 // ========== 双密钥系统全局变量 ==========
 static unsigned char* g_privateKey = nullptr;
 static int g_privateKeyLength = 0;
 static CRITICAL_SECTION g_keySection;
 static bool g_keyInitialized = false;
+
+// ========== 多线程配置函数实现 ==========
+
+// 设置线程数量
+int SetThreadCount(int threadCount) {
+	// 参数验证
+	if (threadCount < MIN_THREAD_COUNT || threadCount > MAX_THREADS) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 初始化线程临界区（只初始化一次）
+	if (!g_threadInitialized) {
+		InitializeCriticalSection(&g_threadSection);
+		g_threadInitialized = true;
+	}
+
+	EnterCriticalSection(&g_threadSection);
+	g_threadCount = threadCount;
+	LeaveCriticalSection(&g_threadSection);
+
+	return SUCCESS;
+}
+
+// 获取当前线程数量
+int GetThreadCount() {
+	if (!g_threadInitialized) {
+		return DEFAULT_THREAD_COUNT;
+	}
+
+	EnterCriticalSection(&g_threadSection);
+	int count = g_threadCount;
+	LeaveCriticalSection(&g_threadSection);
+
+	return count;
+}
+
+// 检查是否应该使用多线程处理
+bool ShouldUseMultiThreading(size_t dataSize, int threadCount) {
+	return (dataSize >= MIN_CHUNK_SIZE_FOR_THREADING && threadCount > 1 && g_multiThreadingEnabled);
+}
+
+// ========== 多线程处理核心函数 ==========
+
+// 线程工作函数 - 执行加密或解密操作
+DWORD WINAPI ThreadWorkerFunction(LPVOID lpParam) {
+	ThreadWorkData* workData = (ThreadWorkData*)lpParam;
+	if (!workData) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 执行加密/解密操作
+	for (size_t i = 0; i < workData->dataSize; i++) {
+		// 使用全局位置计算密钥索引，确保与单线程版本一致
+		__int64 globalIndex = workData->globalOffset + i;
+		unsigned char keyByte = workData->combinedKey[globalIndex % workData->combinedKeyLength];
+
+		// 双层XOR + 半字节交换算法（加密和解密使用相同算法，因为是自逆操作）
+		unsigned char a1 = workData->inputBuffer[i];
+		unsigned char a2 = a1 ^ keyByte;
+		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+		unsigned char a4 = a3 ^ keyByte;
+		workData->outputBuffer[i] = a4;
+	}
+
+	// 设置成功状态
+	workData->result = SUCCESS;
+
+	return SUCCESS;
+}
+
+// 初始化多线程上下文
+int InitializeMultiThreadContext(MultiThreadContext* context, size_t totalSize, int threadCount, bool isEncryption) {
+	if (!context || totalSize == 0 || threadCount <= 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	memset(context, 0, sizeof(MultiThreadContext));
+
+	context->totalSize = totalSize;
+	context->isEncryption = isEncryption;
+	context->threadCount = threadCount;
+
+	// 分配工作数据数组
+	context->workData = (ThreadWorkData*)calloc(threadCount, sizeof(ThreadWorkData));
+	if (!context->workData) {
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 分配线程句柄数组
+	context->threadHandles = (HANDLE*)calloc(threadCount, sizeof(HANDLE));
+	if (!context->threadHandles) {
+		free(context->workData);
+		context->workData = nullptr;
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	// 初始化工作数据
+	for (int i = 0; i < threadCount; i++) {
+		context->workData[i].completionEvent = NULL; // 不再使用事件
+		context->workData[i].result = ERR_THREAD_CREATION_FAILED;
+	}
+
+	return SUCCESS;
+}
+
+// 清理多线程上下文
+void CleanupMultiThreadContext(MultiThreadContext* context) {
+	if (!context) return;
+
+	// 线程句柄已在ExecuteMultiThreadOperation中清理，这里只需清理数组
+	if (context->threadHandles) {
+		free(context->threadHandles);
+		context->threadHandles = nullptr;
+	}
+
+	// 清理工作数据
+	if (context->workData) {
+		// 不再需要清理事件，因为我们不再使用它们
+		free(context->workData);
+		context->workData = nullptr;
+	}
+
+	memset(context, 0, sizeof(MultiThreadContext));
+}
+
+// 执行多线程加密/解密操作
+int ExecuteMultiThreadOperation(MultiThreadContext* context, unsigned char* inputData, unsigned char* outputData, unsigned char* combinedKey, int combinedKeyLength) {
+	if (!context || !inputData || !outputData || !combinedKey || combinedKeyLength <= 0) {
+		return ERR_INVALID_PARAMETER;
+	}
+
+	// 计算每个线程处理的数据块大小
+	size_t chunkSize = context->totalSize / context->threadCount;
+	size_t remainder = context->totalSize % context->threadCount;
+
+	// 分配工作任务并创建线程
+	__int64 currentOffset = 0;
+	int actualThreadCount = 0;
+
+	for (int i = 0; i < context->threadCount; i++) {
+		ThreadWorkData* workData = &context->workData[i];
+
+		// 计算当前线程的数据大小（最后一个线程处理剩余数据）
+		size_t currentChunkSize = chunkSize;
+		if (i == context->threadCount - 1) {
+			currentChunkSize += remainder;
+		}
+
+		// 如果没有数据需要处理，跳过这个线程
+		if (currentChunkSize == 0) {
+			break;
+		}
+
+		// 设置工作数据
+		workData->inputBuffer = inputData + currentOffset;
+		workData->outputBuffer = outputData + currentOffset;
+		workData->dataSize = currentChunkSize;
+		workData->globalOffset = currentOffset;
+		workData->combinedKey = combinedKey;
+		workData->combinedKeyLength = combinedKeyLength;
+		workData->threadIndex = i;
+		workData->result = ERR_THREAD_CREATION_FAILED; // 初始状态
+
+		// 创建线程
+		context->threadHandles[i] = CreateThread(
+			NULL,                           // 默认安全属性
+			0,                              // 默认堆栈大小
+			ThreadWorkerFunction,           // 线程函数
+			workData,                       // 传递给线程的参数
+			0,                              // 默认创建标志
+			NULL                            // 不需要线程ID
+		);
+
+		if (!context->threadHandles[i]) {
+			// 线程创建失败，等待已创建的线程完成
+			for (int j = 0; j < actualThreadCount; j++) {
+				if (context->threadHandles[j]) {
+					WaitForSingleObject(context->threadHandles[j], INFINITE);
+					CloseHandle(context->threadHandles[j]);
+					context->threadHandles[j] = NULL;
+				}
+			}
+			return ERR_THREAD_CREATION_FAILED;
+		}
+
+		actualThreadCount++;
+		currentOffset += currentChunkSize;
+	}
+
+	// 简化的等待逻辑：直接等待所有线程完成
+	for (int i = 0; i < actualThreadCount; i++) {
+		if (context->threadHandles[i]) {
+			DWORD waitResult = WaitForSingleObject(context->threadHandles[i], INFINITE);
+			if (waitResult != WAIT_OBJECT_0) {
+				// 等待失败，清理剩余线程
+				for (int j = i; j < actualThreadCount; j++) {
+					if (context->threadHandles[j]) {
+						TerminateThread(context->threadHandles[j], 1);
+						CloseHandle(context->threadHandles[j]);
+						context->threadHandles[j] = NULL;
+					}
+				}
+				return ERR_THREAD_CREATION_FAILED;
+			}
+			CloseHandle(context->threadHandles[i]);
+			context->threadHandles[i] = NULL;
+		}
+	}
+
+	// 检查所有线程的执行结果
+	for (int i = 0; i < actualThreadCount; i++) {
+		if (context->workData[i].result != SUCCESS) {
+			return context->workData[i].result;
+		}
+	}
+
+	return SUCCESS;
+}
 
 // ========== 双密钥系统函数实现 ==========
 
@@ -44,6 +295,12 @@ int InitStreamFile(const char* privateKey) {
 	if (!g_keyInitialized) {
 		InitializeCriticalSection(&g_keySection);
 		g_keyInitialized = true;
+	}
+
+	// 初始化线程临界区（只初始化一次）
+	if (!g_threadInitialized) {
+		InitializeCriticalSection(&g_threadSection);
+		g_threadInitialized = true;
 	}
 
 	EnterCriticalSection(&g_keySection);
@@ -194,7 +451,7 @@ unsigned int CalculateCRC32(const unsigned char* data, size_t length) {
 		0x54DE5729, 0x23D967BF, 0xB3667A2E, 0xC4614AB8, 0x5D681B02, 0x2A6F2B94,
 		0xB40BBE37, 0xC30C8EA1, 0x5A05DF1B, 0x2D02EF8D
 	};
-	
+
 	for (size_t i = 0; i < length; i++) {
 		crc = crc_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
 	}
@@ -204,14 +461,14 @@ unsigned int CalculateCRC32(const unsigned char* data, size_t length) {
 // 新增：计算公钥哈希值用于完整性验证
 unsigned int CalculatePublicKeyHash(const unsigned char* publicKey) {
 	if (!publicKey) return 0;
-	
+
 	size_t keyLen = strlen((const char*)publicKey);
 	if (keyLen == 0) return 0;
-	
+
 	// 使用更复杂的哈希算法，结合CRC32和MD5风格的混合
 	unsigned int hash1 = CalculateCRC32(publicKey, keyLen);
 	unsigned int hash2 = 0;
-	
+
 	// 第二轮哈希：MD5风格的块处理
 	for (size_t i = 0; i < keyLen; i++) {
 		hash2 = ((hash2 << 5) + hash2) + publicKey[i];
@@ -222,12 +479,12 @@ unsigned int CalculatePublicKeyHash(const unsigned char* publicKey) {
 		hash2 ^= (hash2 >> 15);
 		hash2 += (hash2 << 10);
 	}
-	
+
 	// 组合两个哈希值
 	return hash1 ^ hash2;
 }
 
-// 优化的流式文件加密函数（支持双密钥系统和复杂位旋转）
+// 优化的流式文件加密函数（支持双密钥系统和多线程加密）
 int StreamEncryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
 	FILE* inputFile = NULL;
 	FILE* outputFile = NULL;
@@ -235,6 +492,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	unsigned char* combinedKey = NULL;
 	int result = SUCCESS;
 	int combinedKeyLength = 0;
+	MultiThreadContext mtContext = { 0 };
 
 	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
 
@@ -276,15 +534,6 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 		return ERR_FILE_OPEN_FAILED;
 	}
 
-	// 分配大缓冲区用于高性能处理
-	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
-	if (!buffer) {
-		fclose(inputFile);
-		fclose(outputFile);
-		free(combinedKey);
-		return ERR_MEMORY_ALLOCATION_FAILED;
-	}
-
 	// 写入魔数头用于标识加密文件
 	fwrite(MAGIC_HEADER, 1, MAGIC_HEADER_SIZE, outputFile);
 	fwrite(&combinedKeyLength, sizeof(int), 1, outputFile);
@@ -298,25 +547,65 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 		progressCallback(filePath, 0.0);
 	}
 
+	// 分配大缓冲区用于高性能处理（输入和输出缓冲区）
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE * 2);
+	if (!buffer) {
+		fclose(inputFile);
+		fclose(outputFile);
+		free(combinedKey);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	unsigned char* inputBuffer = buffer;
+	unsigned char* outputBuffer = buffer + STREAM_BUFFER_SIZE;
+
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+
 	// 大块处理文件以实现复杂加密的最高速度
 	size_t bytesRead;
 	__int64 totalProcessed = 0;
 
-	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
-		// 高效双层XOR + 半字节交换加密算法（替代位旋转）
-		for (size_t i = 0; i < bytesRead; i++) {
-			// 使用全局位置计算密钥索引，确保与StreamDecryptData一致
-			__int64 globalIndex = totalProcessed + i;
-			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
-			unsigned char a1 = buffer[i];                                    // 原始字节
-			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR
-			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换
-			unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR
-			buffer[i] = a4;                                                  // 最终加密结果
+	while ((bytesRead = fread(inputBuffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 判断是否使用多线程处理
+		if (ShouldUseMultiThreading(bytesRead, currentThreadCount)) {
+			// 使用多线程处理
+			result = InitializeMultiThreadContext(&mtContext, bytesRead, currentThreadCount, true);
+			if (result == SUCCESS) {
+				result = ExecuteMultiThreadOperation(&mtContext, inputBuffer, outputBuffer, combinedKey, combinedKeyLength);
+				CleanupMultiThreadContext(&mtContext);
+			}
+
+			// 如果多线程失败，回退到单线程处理
+			if (result != SUCCESS) {
+				for (size_t i = 0; i < bytesRead; i++) {
+					__int64 globalIndex = totalProcessed + i;
+					unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+					unsigned char a1 = inputBuffer[i];
+					unsigned char a2 = a1 ^ keyByte;
+					unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+					unsigned char a4 = a3 ^ keyByte;
+					outputBuffer[i] = a4;
+				}
+				result = SUCCESS; // 重置结果状态
+			}
+		}
+		else {
+			// 使用单线程处理（小文件或单线程配置）
+			for (size_t i = 0; i < bytesRead; i++) {
+				// 使用全局位置计算密钥索引，确保与解密一致
+				__int64 globalIndex = totalProcessed + i;
+				unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+				unsigned char a1 = inputBuffer[i];                                    // 原始字节
+				unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换
+				unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR
+				outputBuffer[i] = a4;                                                  // 最终加密结果
+			}
 		}
 
 		// 立即写入加密数据
-		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		size_t bytesWritten = fwrite(outputBuffer, 1, bytesRead, outputFile);
 		if (bytesWritten != bytesRead) {
 			result = ERR_ENCRYPTION_FAILED;
 			break;
@@ -355,6 +644,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 		SecureZeroMemory(combinedKey, combinedKeyLength);
 		free(combinedKey);
 	}
+	CleanupMultiThreadContext(&mtContext);
 	free(buffer);
 	fclose(inputFile);
 	fclose(outputFile);
@@ -362,7 +652,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	return result;
 }
 
-// 优化的流式文件解密函数（支持双密钥系统和复杂位旋转）
+// 优化的流式文件解密函数（支持双密钥系统和多线程解密）
 int StreamDecryptFile(const char* filePath, const char* outputPath, const unsigned char* publicKey, ProgressCallback progressCallback) {
 	FILE* inputFile = NULL;
 	FILE* outputFile = NULL;
@@ -372,6 +662,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 	char header[MAGIC_HEADER_SIZE + 1];
 	int storedKeyLength = 0;
 	int combinedKeyLength = 0;
+	MultiThreadContext mtContext = { 0 };
 
 	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
 
@@ -477,8 +768,8 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 		return ERR_FILE_OPEN_FAILED;
 	}
 
-	// 分配大缓冲区
-	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE);
+	// 分配大缓冲区（输入和输出缓冲区）
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE * 2);
 	if (!buffer) {
 		fclose(inputFile);
 		fclose(outputFile);
@@ -486,11 +777,17 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 		return ERR_MEMORY_ALLOCATION_FAILED;
 	}
 
+	unsigned char* inputBuffer = buffer;
+	unsigned char* outputBuffer = buffer + STREAM_BUFFER_SIZE;
+
 	// 获取文件大小并计算数据区大小
 	_fseeki64(inputFile, 0, SEEK_END);
 	__int64 fileSize = _ftelli64(inputFile);
 	_fseeki64(inputFile, currentPos, SEEK_SET);
 	__int64 dataSize = fileSize - currentPos - sizeof(unsigned int);
+
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
 
 	// 初始进度回调通知
 	if (progressCallback) {
@@ -501,27 +798,52 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 	size_t bytesRead;
 	__int64 totalProcessed = 0;
 
-	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+	while ((bytesRead = fread(inputBuffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 处理包含校验和的最后数据块
 		if (totalProcessed + bytesRead >= dataSize) {
 			bytesRead = dataSize - totalProcessed;
 			if (bytesRead <= 0) break;
 		}
 
-		// 高效双层XOR + 半字节交换解密算法（与加密算法相同，自逆操作）
-		for (size_t i = 0; i < bytesRead; i++) {
-			// 使用全局位置计算密钥索引，确保与StreamEncryptFile一致
-			__int64 globalIndex = totalProcessed + i;
-			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
-			unsigned char a1 = buffer[i];                                    // 加密字节
-			unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR（逆向第二次XOR）
-			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换（自逆操作）
-			unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR（逆向第一次XOR）
-			buffer[i] = a4;                                                  // 最终解密结果
+		// 判断是否使用多线程处理
+		if (ShouldUseMultiThreading(bytesRead, currentThreadCount)) {
+			// 使用多线程处理
+			result = InitializeMultiThreadContext(&mtContext, bytesRead, currentThreadCount, false);
+			if (result == SUCCESS) {
+				result = ExecuteMultiThreadOperation(&mtContext, inputBuffer, outputBuffer, combinedKey, combinedKeyLength);
+				CleanupMultiThreadContext(&mtContext);
+			}
+
+			// 如果多线程失败，回退到单线程处理
+			if (result != SUCCESS) {
+				for (size_t i = 0; i < bytesRead; i++) {
+					__int64 globalIndex = totalProcessed + i;
+					unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+					unsigned char a1 = inputBuffer[i];
+					unsigned char a2 = a1 ^ keyByte;
+					unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+					unsigned char a4 = a3 ^ keyByte;
+					outputBuffer[i] = a4;
+				}
+				result = SUCCESS; // 重置结果状态
+			}
+		}
+		else {
+			// 使用单线程处理（小文件或单线程配置）
+			for (size_t i = 0; i < bytesRead; i++) {
+				// 使用全局位置计算密钥索引，确保与StreamEncryptFile一致
+				__int64 globalIndex = totalProcessed + i;
+				unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+				unsigned char a1 = inputBuffer[i];                                    // 加密字节
+				unsigned char a2 = a1 ^ keyByte;                                 // 第一次XOR（逆向第二次XOR）
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);    // 半字节交换（自逆操作）
+				unsigned char a4 = a3 ^ keyByte;                                 // 第二次XOR（逆向第一次XOR）
+				outputBuffer[i] = a4;                                                  // 最终解密结果
+			}
 		}
 
 		// 立即写入解密数据
-		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		size_t bytesWritten = fwrite(outputBuffer, 1, bytesRead, outputFile);
 		if (bytesWritten != bytesRead) {
 			result = ERR_DECRYPTION_FAILED;
 			break;
@@ -550,6 +872,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 		SecureZeroMemory(combinedKey, combinedKeyLength);
 		free(combinedKey);
 	}
+	CleanupMultiThreadContext(&mtContext);
 	free(buffer);
 	fclose(inputFile);
 	fclose(outputFile);
@@ -717,14 +1040,42 @@ int StreamEncryptData(const unsigned char* inputData, size_t inputLength, const 
 	memcpy(outPtr, &publicKeyHash, sizeof(unsigned int));
 	outPtr += sizeof(unsigned int);
 
-	// 加密数据
-	for (size_t i = 0; i < inputLength; i++) {
-		unsigned char keyByte = combinedKey[i % combinedKeyLength];
-		unsigned char a1 = inputData[i];                                    // 原始字节
-		unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR
-		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换
-		unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR
-		outPtr[i] = a4;                                                     // 最终加密结果
+	// 加密数据（支持多线程）
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+
+	// 判断是否使用多线程处理
+	if (ShouldUseMultiThreading(inputLength, currentThreadCount)) {
+		// 使用多线程处理
+		MultiThreadContext mtContext = { 0 };
+		int result = InitializeMultiThreadContext(&mtContext, inputLength, currentThreadCount, true);
+		if (result == SUCCESS) {
+			result = ExecuteMultiThreadOperation(&mtContext, (unsigned char*)inputData, outPtr, combinedKey, combinedKeyLength);
+			CleanupMultiThreadContext(&mtContext);
+		}
+
+		if (result != SUCCESS) {
+			// 多线程失败，回退到单线程处理
+			for (size_t i = 0; i < inputLength; i++) {
+				unsigned char keyByte = combinedKey[i % combinedKeyLength];
+				unsigned char a1 = inputData[i];                                    // 原始字节
+				unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换
+				unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR
+				outPtr[i] = a4;                                                     // 最终加密结果
+			}
+		}
+	}
+	else {
+		// 使用单线程处理（小数据或单线程配置）
+		for (size_t i = 0; i < inputLength; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = inputData[i];                                    // 原始字节
+			unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换
+			unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR
+			outPtr[i] = a4;                                                     // 最终加密结果
+		}
 	}
 	outPtr += inputLength;
 
@@ -848,14 +1199,42 @@ int StreamDecryptData(const unsigned char* inputData, size_t inputLength, const 
 		return ERR_MEMORY_ALLOCATION_FAILED;
 	}
 
-	// 解密数据
-	for (size_t i = 0; i < dataSize; i++) {
-		unsigned char keyByte = combinedKey[i % combinedKeyLength];
-		unsigned char a1 = inPtr[i];                                        // 加密字节
-		unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR（逆向第二次XOR）
-		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换（自逆操作）
-		unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR（逆向第一次XOR）
-		(*outputData)[i] = a4;                                              // 最终解密结果
+	// 解密数据（支持多线程）
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+
+	// 判断是否使用多线程处理
+	if (ShouldUseMultiThreading(dataSize, currentThreadCount)) {
+		// 使用多线程处理
+		MultiThreadContext mtContext = { 0 };
+		int result = InitializeMultiThreadContext(&mtContext, dataSize, currentThreadCount, false);
+		if (result == SUCCESS) {
+			result = ExecuteMultiThreadOperation(&mtContext, (unsigned char*)inPtr, *outputData, combinedKey, combinedKeyLength);
+			CleanupMultiThreadContext(&mtContext);
+		}
+
+		if (result != SUCCESS) {
+			// 多线程失败，回退到单线程处理
+			for (size_t i = 0; i < dataSize; i++) {
+				unsigned char keyByte = combinedKey[i % combinedKeyLength];
+				unsigned char a1 = inPtr[i];                                        // 加密字节
+				unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR（逆向第二次XOR）
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换（自逆操作）
+				unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR（逆向第一次XOR）
+				(*outputData)[i] = a4;                                              // 最终解密结果
+			}
+		}
+	}
+	else {
+		// 使用单线程处理（小数据或单线程配置）
+		for (size_t i = 0; i < dataSize; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = inPtr[i];                                        // 加密字节
+			unsigned char a2 = a1 ^ keyByte;                                    // 第一次XOR（逆向第二次XOR）
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);       // 半字节交换（自逆操作）
+			unsigned char a4 = a3 ^ keyByte;                                    // 第二次XOR（逆向第一次XOR）
+			(*outputData)[i] = a4;                                              // 最终解密结果
+		}
 	}
 
 	*outputLength = dataSize;
@@ -1057,24 +1436,69 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 		progressCallback(filePath, 0.0);
 	}
 
+	// 重新分配缓冲区支持多线程（输入和输出缓冲区）
+	free(buffer);
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE * 2);
+	if (!buffer) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		fclose(outputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	unsigned char* inputBuffer = buffer;
+	unsigned char* outputBuffer = buffer + STREAM_BUFFER_SIZE;
+
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+	MultiThreadContext mtContext = { 0 };
+
 	// 加密文件数据
 	size_t bytesRead;
 	__int64 totalProcessed = 0;
 
-	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
-		// 使用相同的双层XOR + 半字节交换加密算法
-		for (size_t i = 0; i < bytesRead; i++) {
-			// 使用全局位置计算密钥索引，确保一致性
-			__int64 globalIndex = totalProcessed + i;
-			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
-			unsigned char a1 = buffer[i];
-			unsigned char a2 = a1 ^ keyByte;
-			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
-			unsigned char a4 = a3 ^ keyByte;
-			buffer[i] = a4;
+	while ((bytesRead = fread(inputBuffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+		// 判断是否使用多线程处理
+		if (ShouldUseMultiThreading(bytesRead, currentThreadCount)) {
+			// 使用多线程处理
+			result = InitializeMultiThreadContext(&mtContext, bytesRead, currentThreadCount, true);
+			if (result == SUCCESS) {
+				result = ExecuteMultiThreadOperation(&mtContext, inputBuffer, outputBuffer, combinedKey, combinedKeyLength);
+				CleanupMultiThreadContext(&mtContext);
+			}
+
+			// 如果多线程失败，回退到单线程处理
+			if (result != SUCCESS) {
+				for (size_t i = 0; i < bytesRead; i++) {
+					__int64 globalIndex = totalProcessed + i;
+					unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+					unsigned char a1 = inputBuffer[i];
+					unsigned char a2 = a1 ^ keyByte;
+					unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+					unsigned char a4 = a3 ^ keyByte;
+					outputBuffer[i] = a4;
+				}
+				result = SUCCESS; // 重置结果状态
+			}
+		}
+		else {
+			// 使用单线程处理
+			for (size_t i = 0; i < bytesRead; i++) {
+				// 使用全局位置计算密钥索引，确保一致性
+				__int64 globalIndex = totalProcessed + i;
+				unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+				unsigned char a1 = inputBuffer[i];
+				unsigned char a2 = a1 ^ keyByte;
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+				unsigned char a4 = a3 ^ keyByte;
+				outputBuffer[i] = a4;
+			}
 		}
 
-		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		size_t bytesWritten = fwrite(outputBuffer, 1, bytesRead, outputFile);
 		if (bytesWritten != bytesRead) {
 			result = ERR_ENCRYPTION_FAILED;
 			break;
@@ -1089,6 +1513,9 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 			progressCallback(filePath, adjustedProgress);
 		}
 	}
+
+	// 清理多线程上下文
+	CleanupMultiThreadContext(&mtContext);
 
 	// 写入校验和
 	if (result == SUCCESS) {
@@ -1307,30 +1734,75 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 		progressCallback(filePath, 0.0);
 	}
 
+	// 重新分配缓冲区支持多线程（输入和输出缓冲区）
+	free(buffer);
+	buffer = (unsigned char*)malloc(STREAM_BUFFER_SIZE * 2);
+	if (!buffer) {
+		SecureZeroMemory(privateKey, privateKeyLength);
+		SecureZeroMemory(combinedKey, combinedKeyLength);
+		free(privateKey);
+		free(combinedKey);
+		fclose(inputFile);
+		fclose(outputFile);
+		return ERR_MEMORY_ALLOCATION_FAILED;
+	}
+
+	unsigned char* inputBuffer = buffer;
+	unsigned char* outputBuffer = buffer + STREAM_BUFFER_SIZE;
+
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+	MultiThreadContext mtContext = { 0 };
+
 	// 解密文件数据
 	size_t bytesRead;
 	__int64 totalProcessed = 0;
 
-	while ((bytesRead = fread(buffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
+	while ((bytesRead = fread(inputBuffer, 1, STREAM_BUFFER_SIZE, inputFile)) > 0) {
 		// 处理包含校验和的最后数据块
 		if (totalProcessed + bytesRead >= dataSize) {
 			bytesRead = dataSize - totalProcessed;
 			if (bytesRead <= 0) break;
 		}
 
-		// 使用相同的双层XOR + 半字节交换解密算法
-		for (size_t i = 0; i < bytesRead; i++) {
-			// 使用全局位置计算密钥索引，确保一致性
-			__int64 globalIndex = totalProcessed + i;
-			unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
-			unsigned char a1 = buffer[i];
-			unsigned char a2 = a1 ^ keyByte;
-			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
-			unsigned char a4 = a3 ^ keyByte;
-			buffer[i] = a4;
+		// 判断是否使用多线程处理
+		if (ShouldUseMultiThreading(bytesRead, currentThreadCount)) {
+			// 使用多线程处理
+			result = InitializeMultiThreadContext(&mtContext, bytesRead, currentThreadCount, false);
+			if (result == SUCCESS) {
+				result = ExecuteMultiThreadOperation(&mtContext, inputBuffer, outputBuffer, combinedKey, combinedKeyLength);
+				CleanupMultiThreadContext(&mtContext);
+			}
+
+			// 如果多线程失败，回退到单线程处理
+			if (result != SUCCESS) {
+				for (size_t i = 0; i < bytesRead; i++) {
+					__int64 globalIndex = totalProcessed + i;
+					unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+					unsigned char a1 = inputBuffer[i];
+					unsigned char a2 = a1 ^ keyByte;
+					unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+					unsigned char a4 = a3 ^ keyByte;
+					outputBuffer[i] = a4;
+				}
+				result = SUCCESS; // 重置结果状态
+			}
+		}
+		else {
+			// 使用单线程处理
+			for (size_t i = 0; i < bytesRead; i++) {
+				// 使用全局位置计算密钥索引，确保一致性
+				__int64 globalIndex = totalProcessed + i;
+				unsigned char keyByte = combinedKey[globalIndex % combinedKeyLength];
+				unsigned char a1 = inputBuffer[i];
+				unsigned char a2 = a1 ^ keyByte;
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+				unsigned char a4 = a3 ^ keyByte;
+				outputBuffer[i] = a4;
+			}
 		}
 
-		size_t bytesWritten = fwrite(buffer, 1, bytesRead, outputFile);
+		size_t bytesWritten = fwrite(outputBuffer, 1, bytesRead, outputFile);
 		if (bytesWritten != bytesRead) {
 			result = ERR_DECRYPTION_FAILED;
 			break;
@@ -1344,6 +1816,9 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 			progressCallback(filePath, dataProgress);
 		}
 	}
+
+	// 清理多线程上下文
+	CleanupMultiThreadContext(&mtContext);
 
 	// 解密完成
 	if (result == SUCCESS) {
@@ -1460,14 +1935,42 @@ int SelfContainedEncryptData(const unsigned char* inputData, size_t inputLength,
 	memcpy(outPtr, &privateKeyHash, sizeof(unsigned int));
 	outPtr += sizeof(unsigned int);
 
-	// 加密数据
-	for (size_t i = 0; i < inputLength; i++) {
-		unsigned char keyByte = combinedKey[i % combinedKeyLength];
-		unsigned char a1 = inputData[i];
-		unsigned char a2 = a1 ^ keyByte;
-		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
-		unsigned char a4 = a3 ^ keyByte;
-		outPtr[i] = a4;
+	// 加密数据（支持多线程）
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+
+	// 判断是否使用多线程处理
+	if (ShouldUseMultiThreading(inputLength, currentThreadCount)) {
+		// 使用多线程处理
+		MultiThreadContext mtContext = { 0 };
+		int mtResult = InitializeMultiThreadContext(&mtContext, inputLength, currentThreadCount, true);
+		if (mtResult == SUCCESS) {
+			mtResult = ExecuteMultiThreadOperation(&mtContext, (unsigned char*)inputData, outPtr, combinedKey, combinedKeyLength);
+			CleanupMultiThreadContext(&mtContext);
+		}
+
+		if (mtResult != SUCCESS) {
+			// 多线程失败，回退到单线程处理
+			for (size_t i = 0; i < inputLength; i++) {
+				unsigned char keyByte = combinedKey[i % combinedKeyLength];
+				unsigned char a1 = inputData[i];
+				unsigned char a2 = a1 ^ keyByte;
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+				unsigned char a4 = a3 ^ keyByte;
+				outPtr[i] = a4;
+			}
+		}
+	}
+	else {
+		// 使用单线程处理（小数据或单线程配置）
+		for (size_t i = 0; i < inputLength; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = inputData[i];
+			unsigned char a2 = a1 ^ keyByte;
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+			unsigned char a4 = a3 ^ keyByte;
+			outPtr[i] = a4;
+		}
 	}
 	outPtr += inputLength;
 
@@ -1619,14 +2122,42 @@ int SelfContainedDecryptData(const unsigned char* inputData, size_t inputLength,
 		return ERR_MEMORY_ALLOCATION_FAILED;
 	}
 
-	// 解密数据
-	for (size_t i = 0; i < dataSize; i++) {
-		unsigned char keyByte = combinedKey[i % combinedKeyLength];
-		unsigned char a1 = inPtr[i];
-		unsigned char a2 = a1 ^ keyByte;
-		unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
-		unsigned char a4 = a3 ^ keyByte;
-		(*outputData)[i] = a4;
+	// 解密数据（支持多线程）
+	// 获取当前线程配置
+	int currentThreadCount = GetThreadCount();
+
+	// 判断是否使用多线程处理
+	if (ShouldUseMultiThreading(dataSize, currentThreadCount)) {
+		// 使用多线程处理
+		MultiThreadContext mtContext = { 0 };
+		int mtResult = InitializeMultiThreadContext(&mtContext, dataSize, currentThreadCount, false);
+		if (mtResult == SUCCESS) {
+			mtResult = ExecuteMultiThreadOperation(&mtContext, (unsigned char*)inPtr, *outputData, combinedKey, combinedKeyLength);
+			CleanupMultiThreadContext(&mtContext);
+		}
+
+		if (mtResult != SUCCESS) {
+			// 多线程失败，回退到单线程处理
+			for (size_t i = 0; i < dataSize; i++) {
+				unsigned char keyByte = combinedKey[i % combinedKeyLength];
+				unsigned char a1 = inPtr[i];
+				unsigned char a2 = a1 ^ keyByte;
+				unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+				unsigned char a4 = a3 ^ keyByte;
+				(*outputData)[i] = a4;
+			}
+		}
+	}
+	else {
+		// 使用单线程处理（小数据或单线程配置）
+		for (size_t i = 0; i < dataSize; i++) {
+			unsigned char keyByte = combinedKey[i % combinedKeyLength];
+			unsigned char a1 = inPtr[i];
+			unsigned char a2 = a1 ^ keyByte;
+			unsigned char a3 = ((a2 & 0x0F) << 4) | ((a2 & 0xF0) >> 4);
+			unsigned char a4 = a3 ^ keyByte;
+			(*outputData)[i] = a4;
+		}
 	}
 
 	*outputLength = dataSize;
@@ -1996,4 +2527,25 @@ int ExtractPrivateKeyFromData(const unsigned char* inputData, size_t inputLength
 	free(privateKey);
 
 	return SUCCESS;
+}
+
+// ========== 库清理函数 ==========
+
+// 清理库资源（在程序退出或DLL卸载时调用）
+ void CleanupEncryptionLibrary() {
+	// 清理私钥
+	ClearPrivateKey();
+
+	// 清理私钥临界区
+	if (g_keyInitialized) {
+		DeleteCriticalSection(&g_keySection);
+		g_keyInitialized = false;
+	}
+
+	// 清理线程临界区和重置多线程状态
+	if (g_threadInitialized) {
+		DeleteCriticalSection(&g_threadSection);
+		g_threadInitialized = false;
+		g_multiThreadingEnabled = true; // 重置为默认启用状态
+	}
 }

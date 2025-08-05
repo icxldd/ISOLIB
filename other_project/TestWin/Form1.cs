@@ -224,13 +224,13 @@ namespace TestWin
 
                 // 解密文件 - 使用EncodeLib
                 richTextBox1.Clear();
-                richTextBox1.AppendText($"开始解密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
+                richTextBox1.AppendText($"{DateTime.Now.ToString()}开始解密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
 
                 int result = EncodeLibManager.Instance.DecryptFile(inputFile, decryptedFile, key, OnProgress);
 
                 if (result == 0)
                 {
-                    richTextBox1.AppendText($"解密完成！文件保存在: {decryptedFile}\r\n");
+                    richTextBox1.AppendText($"{DateTime.Now.ToString()}解密完成！文件保存在: {decryptedFile}\r\n");
                     MessageBox.Show($"文件解密成功！\n解密文件保存在：{decryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
