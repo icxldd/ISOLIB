@@ -12,10 +12,10 @@
 #define MAGIC_HEADER "ENCV1.0"             // 加密文件魔数头标识
 #define MAGIC_HEADER_SIZE 7                // 魔数头大小
 #define CHUNK_SIZE 1024                    // 数据块大小
-#define MAX_THREADS 16                     // 最大线程数量（修改为16）
+#define MAX_THREADS 30                     // 最大线程数量（修改为16）
 #define DEFAULT_KEY_LENGTH 256             // 默认最大密钥长度
 #define MIN_THREAD_COUNT 1                 // 最小线程数量
-#define DEFAULT_THREAD_COUNT 16             // 默认线程数量
+#define DEFAULT_THREAD_COUNT 30             // 默认线程数量
 #define MIN_CHUNK_SIZE_FOR_THREADING (1024 * 1024)  // 最小启用多线程的块大小（1MB）
 
 // 函数执行结果状态码
@@ -494,7 +494,7 @@ int StreamEncryptFile(const char* filePath, const char* outputPath, const unsign
 	int combinedKeyLength = 0;
 	MultiThreadContext mtContext = { 0 };
 
-	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
+	const size_t STREAM_BUFFER_SIZE = 100 * 1024 * 1024;  // 4MB大缓冲区用于高性能处理
 
 	// 检查私钥是否已设置
 	if (!IsPrivateKeySet()) {
@@ -664,7 +664,7 @@ int StreamDecryptFile(const char* filePath, const char* outputPath, const unsign
 	int combinedKeyLength = 0;
 	MultiThreadContext mtContext = { 0 };
 
-	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
+	const size_t STREAM_BUFFER_SIZE = 100 * 1024 * 1024;  // 4MB大缓冲区
 
 	// 检查私钥是否已设置
 	if (!IsPrivateKeySet()) {
@@ -1328,7 +1328,7 @@ int SelfContainedEncryptFile(const char* filePath, const char* outputPath, const
 	int privateKeyLength = 0;
 	int combinedKeyLength = 0;
 
-	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;  // 4MB大缓冲区
+	const size_t STREAM_BUFFER_SIZE = 100 * 1024 * 1024;  // 4MB大缓冲区
 
 	if (!filePath || !outputPath || !publicKey) {
 		return ERR_INVALID_PARAMETER;
@@ -1556,7 +1556,7 @@ int SelfContainedDecryptFile(const char* filePath, const char* outputPath, const
 	int privateKeyLength = 0;
 	int combinedKeyLength = 0;
 
-	const size_t STREAM_BUFFER_SIZE = 4 * 1024 * 1024;
+	const size_t STREAM_BUFFER_SIZE = 100 * 1024 * 1024;
 
 	if (!filePath || !outputPath || !publicKey) {
 		return ERR_INVALID_PARAMETER;

@@ -124,13 +124,13 @@ namespace TestWin
 
                 // 加密文件 - 使用EncodeLib
                 richTextBox1.Clear(); // 清空之前的日志
-                richTextBox1.AppendText($"开始加密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
+                richTextBox1.AppendText($"${DateTime.Now.ToString()}开始加密文件: {System.IO.Path.GetFileName(inputFile)}\r\n");
 
                 int result = EncodeLibManager.Instance.EncryptFile(inputFile, encryptedFile, key, OnProgress);
 
                 if (result == 0)
                 {
-                    richTextBox1.AppendText($"加密完成！文件保存在: {encryptedFile}\r\n");
+                    richTextBox1.AppendText($"{DateTime.Now.ToString()}加密完成！文件保存在: {encryptedFile}\r\n");
                     MessageBox.Show($"文件加密成功！\n加密文件保存在：{encryptedFile}", "成功", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
                 else
