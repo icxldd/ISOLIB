@@ -53,7 +53,7 @@
     <Compile Include="WindowsDllManager.cs" />
   </ItemGroup>
   <ItemGroup>
-    <EmbeddedResource Include="ExportLib.vmp.dll" />
+    <EmbeddedResource Include="ExportLib.dll" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
 </Project>

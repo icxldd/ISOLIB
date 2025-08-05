@@ -15,7 +15,7 @@ namespace EncodeLib
         /// <summary>
         /// 加密库DLL文件名
         /// </summary>
-        public const string DLL_NAME = "ExportLib.vmp.dll";
+        public const string DLL_NAME = "ExportLib.dll";
         
         /// <summary>
         /// 备用DLL文件名
