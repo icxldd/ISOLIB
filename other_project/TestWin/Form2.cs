@@ -185,7 +185,7 @@ namespace TestWin
                 string extension = Path.GetExtension(inputFile);
                 string outputFile = Path.Combine(directory, fileName + extension + ".selfenc");
 
-                AppendLog("🔐 ===== 开始自包含式文件加密 =====");
+                AppendLog($"{DateTime.Now.ToString()}🔐 ===== 开始自包含式文件加密 =====");
                 AppendLog($"📁 输入文件: {Path.GetFileName(inputFile)}");
                 AppendLog($"🔑 公钥: {publicKey}");
                 AppendLog($"📁 输出文件: {Path.GetFileName(outputFile)}");
@@ -197,7 +197,7 @@ namespace TestWin
                 if (result == 0)
                 {
                     FileInfo outputInfo = new FileInfo(outputFile);
-                    AppendLog($"✅ 加密成功！");
+                    AppendLog($"{DateTime.Now.ToString()}✅ 加密成功！");
                     AppendLog($"📁 输出文件: {outputFile}");
                     AppendLog($"📄 输出大小: {FormatFileSize(outputInfo.Length)}");
                     AppendLog($"🔒 私钥已自动生成并嵌入到加密文件中");
@@ -265,7 +265,7 @@ namespace TestWin
                     outputFile = Path.Combine(directory, fileName + extension + ".decrypted");
                 }
 
-                AppendLog("🔓 ===== 开始自包含式文件解密 =====");
+                AppendLog($"{DateTime.Now.ToString()}🔓 ===== 开始自包含式文件解密 =====");
                 AppendLog($"📁 输入文件: {Path.GetFileName(inputFile)}");
                 AppendLog($"🔑 公钥: {publicKey}");
                 AppendLog($"📁 输出文件: {Path.GetFileName(outputFile)}");
@@ -277,7 +277,7 @@ namespace TestWin
                 if (result == 0)
                 {
                     FileInfo outputInfo = new FileInfo(outputFile);
-                    AppendLog($"✅ 解密成功！");
+                    AppendLog($"{DateTime.Now.ToString()}✅ 解密成功！");
                     AppendLog($"📁 输出文件: {outputFile}");
                     AppendLog($"📄 输出大小: {FormatFileSize(outputInfo.Length)}");
                     AppendLog($"🔓 私钥验证通过，文件完整性确认");
