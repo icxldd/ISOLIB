@@ -15,7 +15,7 @@
 #define MAX_THREADS 30                     // 最大线程数量（修改为16）
 #define DEFAULT_KEY_LENGTH 256             // 默认最大密钥长度
 #define MIN_THREAD_COUNT 1                 // 最小线程数量
-#define DEFAULT_THREAD_COUNT 30             // 默认线程数量
+#define DEFAULT_THREAD_COUNT 10             // 默认线程数量
 #define MIN_CHUNK_SIZE_FOR_THREADING (1024 * 1024)  // 最小启用多线程的块大小（1MB）
 
 // 函数执行结果状态码
