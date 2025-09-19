@@ -77,6 +77,9 @@ int GenerateMachineFingerprint(char* fingerprint, int maxLen);
 /// <returns>0=成功, -1=参数错误</returns>
 __declspec(dllexport) int GetMachineFingerprint(const char* data);
 
+
+__declspec(dllexport) int GetMachineFingerprintV2(const char* data);
+
 /// <summary>
 /// 生成机器指纹（调试版本）- 显示详细硬件信息获取状态
 /// </summary>

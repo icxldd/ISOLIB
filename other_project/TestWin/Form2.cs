@@ -497,7 +497,7 @@ namespace TestWin
 
         private void button1_Click(object sender, EventArgs e)
         {
-            string dd = EncodeLibManager.Instance.GetMachineFingerprint();
+            string dd = EncodeLibManager.Instance.GetMachineFingerprint(textBox2.Text);
 
             AppendLog(dd);
         }

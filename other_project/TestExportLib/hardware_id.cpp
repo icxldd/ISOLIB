@@ -234,6 +234,100 @@ bool GetWMIStringValue(IWbemServices* pSvc, const wchar_t* query, const wchar_t*
     return -3; // 查询失败
 }
 
+ // 获取网卡MAC地址
+ int GetMACAddress2(char* macAddr, int maxLen) {
+    if (!macAddr || maxLen <= 0) return -1;
+
+    ULONG outBufLen = sizeof(IP_ADAPTER_INFO);
+    PIP_ADAPTER_INFO pAdapterInfo = (IP_ADAPTER_INFO*)malloc(sizeof(IP_ADAPTER_INFO));
+    if (pAdapterInfo == NULL) return -2;
+
+    // 获取适配器信息
+    if (GetAdaptersInfo(pAdapterInfo, &outBufLen) == ERROR_BUFFER_OVERFLOW) {
+        free(pAdapterInfo);
+        pAdapterInfo = (IP_ADAPTER_INFO*)malloc(outBufLen);
+        if (pAdapterInfo == NULL) return -2;
+    }
+
+    DWORD dwRetVal = GetAdaptersInfo(pAdapterInfo, &outBufLen);
+    if (dwRetVal == NO_ERROR) {
+        char bestMac[64] = { 0 };
+        bool foundMac = false;
+
+        PIP_ADAPTER_INFO pAdapter = pAdapterInfo;
+        while (pAdapter) {
+            // 只接受以太网卡，排除WiFi和USB网卡
+            if (pAdapter->Type == MIB_IF_TYPE_ETHERNET) {
+                char tempMac[64];
+                sprintf_s(tempMac, sizeof(tempMac), "%02X-%02X-%02X-%02X-%02X-%02X",
+                    pAdapter->Address[0], pAdapter->Address[1],
+                    pAdapter->Address[2], pAdapter->Address[3],
+                    pAdapter->Address[4], pAdapter->Address[5]);
+
+                OutputDebugStringA(pAdapter->AdapterName);
+                OutputDebugStringA(pAdapter->Description);
+                
+
+                // 跳过全零MAC地址
+                if (strncmp(tempMac, "00-00-00-00-00-00", 17) != 0) {
+                    // 检查是否为USB网卡 - 通过适配器描述判断
+                    bool isUSBAdapter = false;
+                    if (pAdapter->Description) {
+                        // 将描述转换为小写进行匹配
+                        char desc[256];
+                        strcpy_s(desc, sizeof(desc), pAdapter->Description);
+                        for (int i = 0; desc[i]; i++) {
+                            desc[i] = tolower(desc[i]);
+                        }
+
+                        // 检查是否包含USB相关关键字
+                        if (strstr(desc, "usb") ||
+                            strstr(desc, "wireless") ||
+                            strstr(desc, "wifi") ||
+                            strstr(desc, "802.11") ||
+                            strstr(desc, "dongle") ||
+                            strstr(desc, "adapter")) {
+                            isUSBAdapter = true;
+                        }
+                    }
+
+                    // 检查已知的虚拟网卡MAC前缀
+                    bool isVirtualAdapter = (strncmp(tempMac, "00-50-56", 8) == 0 ||  // VMware
+                        strncmp(tempMac, "08-00-27", 8) == 0 ||  // VirtualBox
+                        strncmp(tempMac, "00-0C-29", 8) == 0 ||  // VMware
+                        strncmp(tempMac, "00-1C-14", 8) == 0 ||  // VMware
+                        strncmp(tempMac, "00-15-5D", 8) == 0 ||  // Hyper-V
+                        strncmp(tempMac, "00-16-3E", 8) == 0);   // Xen
+
+                    // 只使用内置物理网卡
+                    if (!isUSBAdapter && !isVirtualAdapter) {
+                        strcpy_s(macAddr, maxLen, tempMac);
+                        free(pAdapterInfo);
+                        return 0; // 找到内置物理网卡，直接返回
+                    }
+
+                    // 记录第一个可用的网卡作为备选
+                    if (!foundMac) {
+                        strcpy_s(bestMac, sizeof(bestMac), tempMac);
+                        foundMac = true;
+                    }
+                }
+            }
+            pAdapter = pAdapter->Next;
+        }
+
+        // 如果没找到物理网卡，使用任何可用的MAC地址
+        if (foundMac) {
+            strcpy_s(macAddr, maxLen, bestMac);
+            free(pAdapterInfo);
+            return 0;
+        }
+    }
+
+    free(pAdapterInfo);
+    return -3; // 未找到任何网卡
+}
+
 // 获取网卡MAC地址
 int GetMACAddress(char* macAddr, int maxLen) {
     if (!macAddr || maxLen <= 0) return -1;
@@ -470,6 +564,154 @@ int GenerateMachineFingerprint(char* fingerprint, int maxLen) {
             (long long)GetTickCount64());
     }
 
+    OutputDebugStringA(combined);
+    
+    // 使用改进的哈希算法 - 提高唯一性
+    unsigned long long hash1 = 0x9e3779b97f4a7c15ULL; // 种子1
+    unsigned long long hash2 = 0x517cc1b727220a95ULL; // 种子2
+    
+    // 双重哈希算法
+    int len = strlen(combined);
+    for (int i = 0; i < len; i++) {
+        // 第一个哈希 - DJB2变种
+        hash1 = ((hash1 << 5) + hash1) + (unsigned char)combined[i];
+        // 第二个哈希 - SDBM变种
+        hash2 = (unsigned char)combined[i] + (hash2 << 6) + (hash2 << 16) - hash2;
+    }
+    
+    // 混合两个哈希值
+    hash1 ^= (hash1 >> 32);
+    hash1 *= 0x9e3779b97f4a7c15ULL;
+    hash1 ^= (hash1 >> 32);
+    
+    hash2 ^= (hash2 >> 32);
+    hash2 *= 0x517cc1b727220a95ULL;
+    hash2 ^= (hash2 >> 32);
+    
+    // 组合两个哈希值
+    unsigned long long finalHash = hash1 ^ hash2;
+
+    // 生成稳定的指纹格式：XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX
+    sprintf_s(fingerprint, maxLen, "%08X-%04X-%04X-%04X-%08X%04X",
+        (unsigned int)(finalHash & 0xFFFFFFFF),
+        (unsigned short)((finalHash >> 32) & 0xFFFF),
+        (unsigned short)((finalHash >> 16) & 0xFFFF),
+        (unsigned short)((finalHash >> 48) & 0xFFFF),
+        (unsigned int)((hash1 >> 8) & 0xFFFFFFFF),
+        (unsigned short)(hash2 & 0xFFFF));
+
+    return 0; // 成功
+}
+
+
+
+// 生成机器指纹（基于多个硬件标识符）- 修复唯一性问题
+int GenerateMachineFingerprintV2(char* fingerprint, int maxLen) {
+    if (!fingerprint || maxLen <= 0) return -1;
+
+    char cpuId[256] = { 0 };
+    char macAddr[256] = { 0 };
+    char diskId[256] = { 0 };
+    char motherboardId[256] = { 0 };
+    char biosId[256] = { 0 };
+    char systemUuid[256] = { 0 };
+
+    // 首先获取不需要COM的硬件信息
+    GetCPUID(cpuId, sizeof(cpuId));
+    GetMACAddress2(macAddr, sizeof(macAddr));
+
+    // 使用独立的作用域确保WMI资源立即释放
+    {
+        WMIHelper wmi;
+        if (wmi.IsInitialized()) {
+            IWbemServices* pSvc = wmi.GetService();
+            
+            // 快速批量获取所有WMI信息
+            // 获取硬盘序列号
+            const wchar_t* diskQuery = L"SELECT SerialNumber FROM Win32_PhysicalMedia WHERE Tag LIKE '%PHYSICALDRIVE0%'";
+            if (GetWMIStringValue(pSvc, diskQuery, L"SerialNumber", diskId, sizeof(diskId))) {
+                // 移除空格
+                char* src = diskId;
+                char* dst = diskId;
+                while (*src) {
+                    if (*src != ' ') {
+                        *dst++ = *src;
+                    }
+                    src++;
+                }
+                *dst = '\0';
+            }
+            
+            // 获取主板序列号
+            const wchar_t* mbQuery = L"SELECT SerialNumber FROM Win32_BaseBoard";
+            GetWMIStringValue(pSvc, mbQuery, L"SerialNumber", motherboardId, sizeof(motherboardId));
+            
+            // 获取BIOS序列号
+            const wchar_t* biosQuery = L"SELECT SerialNumber FROM Win32_BIOS";
+            GetWMIStringValue(pSvc, biosQuery, L"SerialNumber", biosId, sizeof(biosId));
+            
+            // 获取系统UUID
+            const wchar_t* uuidQuery = L"SELECT UUID FROM Win32_ComputerSystemProduct";
+            GetWMIStringValue(pSvc, uuidQuery, L"UUID", systemUuid, sizeof(systemUuid));
+        }
+        // WMIHelper析构函数会在这里自动调用，完全清理COM资源
+    }
+
+    // 强制COM清理（额外保险）
+    CoFreeUnusedLibraries();
+
+    // 至少需要有一个有效的硬件标识符
+    if (strlen(cpuId) == 0 && strlen(macAddr) == 0 && strlen(diskId) == 0 && 
+        strlen(motherboardId) == 0 && strlen(biosId) == 0 && strlen(systemUuid) == 0) {
+        return -3; // 没有获取到任何硬件标识符
+    }
+
+    // 组合多个硬件标识符（只使用成功获取的）
+    char combined[2048] = { 0 };
+    
+    if (strlen(cpuId) > 0) {
+        strcat_s(combined, sizeof(combined), "CPU:");
+        strcat_s(combined, sizeof(combined), cpuId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(macAddr) > 0) {
+        strcat_s(combined, sizeof(combined), "MAC:");
+        strcat_s(combined, sizeof(combined), macAddr);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(diskId) > 0) {
+        strcat_s(combined, sizeof(combined), "DISK:");
+        strcat_s(combined, sizeof(combined), diskId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(motherboardId) > 0) {
+        strcat_s(combined, sizeof(combined), "MB:");
+        strcat_s(combined, sizeof(combined), motherboardId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(biosId) > 0) {
+        strcat_s(combined, sizeof(combined), "BIOS:");
+        strcat_s(combined, sizeof(combined), biosId);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+    
+    if (strlen(systemUuid) > 0) {
+        strcat_s(combined, sizeof(combined), "UUID:");
+        strcat_s(combined, sizeof(combined), systemUuid);
+        strcat_s(combined, sizeof(combined), ";");
+    }
+
+    // 如果组合字符串为空，使用当前时间戳作为备选
+    if (strlen(combined) == 0) {
+        sprintf_s(combined, sizeof(combined), "FALLBACK:%lld", 
+            (long long)GetTickCount64());
+    }
+    OutputDebugStringA(combined);
+
     // 使用改进的哈希算法 - 提高唯一性
     unsigned long long hash1 = 0x9e3779b97f4a7c15ULL; // 种子1
     unsigned long long hash2 = 0x517cc1b727220a95ULL; // 种子2
@@ -557,6 +799,25 @@ extern "C" __declspec(dllexport) int GetMachineFingerprint(const char* data) {
     
     // 调用现有的GenerateMachineFingerprint函数
     int result = GenerateMachineFingerprint(tempBuffer, sizeof(tempBuffer));
+    
+    if (result == 0) {
+        // 成功生成指纹，复制到输出缓冲区
+        // 注意：这里假设C#传递的缓冲区至少有256字节
+        strcpy_s(const_cast<char*>(data), 256, tempBuffer);
+    }
+    
+    return result;
+}
+
+// 生成机器指纹（C#友好版本）- 无需长度参数
+extern "C" __declspec(dllexport) int GetMachineFingerprintV2(const char* data) {
+    if (!data) return -1;
+
+    // 更安全的方式：先在栈上生成指纹，再复制到输出缓冲区
+    char tempBuffer[256] = {0};
+    
+    // 调用现有的GenerateMachineFingerprint函数
+    int result = GenerateMachineFingerprintV2(tempBuffer, sizeof(tempBuffer));
     
     if (result == 0) {
         // 成功生成指纹，复制到输出缓冲区

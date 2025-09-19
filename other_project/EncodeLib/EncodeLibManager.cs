@@ -153,7 +153,7 @@ namespace EncodeLib
             {
                 string errorMsg = $"初始化内存DLL失败: {ex.Message}";
                 System.Diagnostics.Debug.WriteLine($"EncodeLib错误: {errorMsg}");
-                
+
                 // 清理资源
                 memoryDllManager?.Dispose();
                 memoryDllManager = null;
@@ -170,12 +170,12 @@ namespace EncodeLib
             {
                 // 寻找DLL文件路径
                 string dllPath = FindDllPath();
-                
+
                 if (string.IsNullOrEmpty(dllPath))
                 {
                     // 尝试从嵌入资源提取DLL到当前运行目录
                     dllPath = ExtractEmbeddedDllToCurrentDirectory();
-                    
+
                     if (string.IsNullOrEmpty(dllPath))
                     {
                         throw new FileNotFoundException($"找不到{GlobalData.DLL_NAME}文件，且无法从嵌入资源中提取");
@@ -210,7 +210,7 @@ namespace EncodeLib
             try
             {
                 const string dllName = GlobalData.DLL_NAME;
-                
+
                 // 检查嵌入资源中是否存在DLL
                 if (!EmbeddedResourceManager.IsEmbeddedDllExists(dllName))
                 {
@@ -1211,7 +1211,7 @@ namespace EncodeLib
         /// 并将它们组合生成一个唯一的机器指纹。该指纹可用于硬件锁定、许可验证等用途。
         /// 指纹格式：XXXXXXXX-XXXX-XXXX（基于硬件ID的哈希值）
         /// </remarks>
-        public string GetMachineFingerprint()
+        public string GetMachineFingerprint(string deviceId)
         {
             CheckDllLoaded();
 
@@ -1222,21 +1222,60 @@ namespace EncodeLib
 
                 // 调用DLL函数获取机器指纹
                 var currentManager = GetCurrentDllManager();
-                int errorCode = currentManager.GetMachineFingerprint(fingerprint);
 
-                if (errorCode != 0)
+                if (string.IsNullOrWhiteSpace(deviceId))
                 {
-                    throw new InvalidOperationException($"获取机器指纹失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                    int errorCode = currentManager.GetMachineFingerprintV2(fingerprint);
+
+                    if (errorCode != 0)
+                    {
+                        throw new InvalidOperationException($"获取机器指纹失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                    }
+
+                    string result = fingerprint.ToString().Trim();
+
+                    if (string.IsNullOrEmpty(result))
+                    {
+                        throw new InvalidOperationException("获取的机器指纹为空");
+                    }
+
+                    return result;
+                }
+                else
+                {
+                    int errorCode = currentManager.GetMachineFingerprint(fingerprint);
+
+                    if (errorCode != 0)
+                    {
+                        throw new InvalidOperationException($"获取机器指纹失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                    }
+
+                    string result = fingerprint.ToString().Trim();
+
+                    if (result.Equals(deviceId))
+                    {
+                        return result;
+                    }
+                    else
+                    {
+                        errorCode = currentManager.GetMachineFingerprintV2(fingerprint);
+
+                        if (errorCode != 0)
+                        {
+                            throw new InvalidOperationException($"获取机器指纹失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                        }
+
+                        result = fingerprint.ToString().Trim();
+
+                        if (string.IsNullOrEmpty(result))
+                        {
+                            throw new InvalidOperationException("获取的机器指纹为空");
+                        }
+
+                        return result;
+                    }
                 }
 
-                string result = fingerprint.ToString().Trim();
-                
-                if (string.IsNullOrEmpty(result))
-                {
-                    throw new InvalidOperationException("获取的机器指纹为空");
-                }
-
-                return result;
             }
             catch (Exception ex)
             {
@@ -1246,37 +1285,12 @@ namespace EncodeLib
         }
 
         /// <summary>
-        /// 获取机器指纹（带错误处理的安全版本）
-        /// </summary>
-        /// <param name="fingerprint">输出机器指纹字符串</param>
-        /// <returns>成功返回true，失败返回false</returns>
-        /// <remarks>
-        /// 此函数是GetMachineFingerprint的安全版本，不会抛出异常，而是通过返回值指示操作结果。
-        /// 适用于需要优雅处理错误的场景。
-        /// </remarks>
-        public bool TryGetMachineFingerprint(out string fingerprint)
-        {
-            fingerprint = string.Empty;
-
-            try
-            {
-                fingerprint = GetMachineFingerprint();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"EncodeLib尝试获取机器指纹失败: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
         /// 检查DLL是否已加载的辅助方法
         /// </summary>
         private void CheckDllLoaded()
         {
-            if ((dllManager == null || !dllManager.IsLoaded) && 
-                (memoryDllManager == null || !memoryDllManager.IsLoaded) || 
+            if ((dllManager == null || !dllManager.IsLoaded) &&
+                (memoryDllManager == null || !memoryDllManager.IsLoaded) ||
                 disposed)
             {
                 throw new InvalidOperationException("DLL未加载或已释放！");
@@ -1314,10 +1328,10 @@ namespace EncodeLib
             {
                 dllManager?.Dispose();
                 dllManager = null;
-                
+
                 memoryDllManager?.Dispose();
                 memoryDllManager = null;
-                
+
                 disposed = true;
 
                 lock (lockObject)
