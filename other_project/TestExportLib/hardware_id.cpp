@@ -749,13 +749,14 @@ int GenerateMachineFingerprintV2(char* fingerprint, int maxLen) {
     return 0; // 成功
 }
 
-// 获取详细硬件信息
-int GetHardwareInfo(char* info, int maxLen) {
+// 获取详细硬件信息（DLL 导出，供 EncodeLib / C# 调用）
+extern "C" __declspec(dllexport) int GetHardwareInfo(char* info, int maxLen) {
     if (!info || maxLen <= 0) return -1;
 
     char windowsId[256] = { 0 };
     char diskId[256] = { 0 };
     char macAddr[256] = { 0 };
+    char macAddrV2[256] = { 0 };
     char motherboardId[256] = { 0 };
     char cpuId[256] = { 0 };
     char biosId[256] = { 0 };
@@ -765,6 +766,7 @@ int GetHardwareInfo(char* info, int maxLen) {
     GetWindowsID(windowsId, sizeof(windowsId));
     GetHardDiskID(diskId, sizeof(diskId));
     GetMACAddress(macAddr, sizeof(macAddr));
+    GetMACAddress2(macAddrV2, sizeof(macAddrV2));
     GetMotherboardID(motherboardId, sizeof(motherboardId));
     GetCPUID(cpuId, sizeof(cpuId));
     GetBIOSID(biosId, sizeof(biosId));
@@ -774,7 +776,8 @@ int GetHardwareInfo(char* info, int maxLen) {
     sprintf_s(info, maxLen,
         "Windows ID: %s\n"
         "Hard Disk ID: %s\n"
-        "MAC Address: %s\n"
+        "MACV1 Address: %s\n"
+        "MACV2 Address: %s\n"
         "Motherboard ID: %s\n"
         "CPU ID: %s\n"
         "BIOS ID: %s\n"
@@ -782,6 +785,7 @@ int GetHardwareInfo(char* info, int maxLen) {
         windowsId[0] ? windowsId : "N/A",
         diskId[0] ? diskId : "N/A",
         macAddr[0] ? macAddr : "N/A",
+        macAddrV2[0] ? macAddrV2 : "N/A",
         motherboardId[0] ? motherboardId : "N/A",
         cpuId[0] ? cpuId : "N/A",
         biosId[0] ? biosId : "N/A",

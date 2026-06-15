@@ -151,6 +151,11 @@ namespace EncodeLib
         public delegate int GetMachineFingerprintV2Delegate(
             [MarshalAs(UnmanagedType.LPStr)] System.Text.StringBuilder data);
 
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int GetHardwareInfoDelegate(
+            [MarshalAs(UnmanagedType.LPStr)] System.Text.StringBuilder info,
+            int maxLen);
+
         // 双密钥系统函数实例
         public InitStreamFileDelegate InitStreamFile { get; private set; }
         public ClearPrivateKeyDelegate ClearPrivateKey { get; private set; }
@@ -180,6 +185,7 @@ namespace EncodeLib
         // 硬件ID获取函数实例
         public GetMachineFingerprintDelegate GetMachineFingerprint { get; private set; }
         public GetMachineFingerprintV2Delegate GetMachineFingerprintV2 { get; private set; }
+        public GetHardwareInfoDelegate GetHardwareInfo { get; private set; }
 
         /// <summary>
         /// 构造函数 - 从指定路径加载DLL到内存
@@ -267,6 +273,7 @@ namespace EncodeLib
                 // 硬件ID获取函数实例
                 GetMachineFingerprint = dllInstance.GetDelegateFromFuncName<GetMachineFingerprintDelegate>("GetMachineFingerprint");
                 GetMachineFingerprintV2 = dllInstance.GetDelegateFromFuncName<GetMachineFingerprintV2Delegate>("GetMachineFingerprintV2");
+                GetHardwareInfo = dllInstance.GetDelegateFromFuncName<GetHardwareInfoDelegate>("GetHardwareInfo");
             }
             catch (EntryPointNotFoundException ex)
             {

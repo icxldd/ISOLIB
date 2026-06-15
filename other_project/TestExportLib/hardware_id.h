@@ -95,7 +95,7 @@ __declspec(dllexport) int GetMachineFingerprintDebug(const char* fingerprint, co
 /// <param name="info">输出缓冲区</param>
 /// <param name="maxLen">缓冲区最大长度</param>
 /// <returns>0=成功, -1=参数错误</returns>
-int GetHardwareInfo(char* info, int maxLen);
+__declspec(dllexport) int GetHardwareInfo(char* info, int maxLen);
 
 #ifdef __cplusplus
 }

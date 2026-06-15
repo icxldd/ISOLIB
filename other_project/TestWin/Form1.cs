@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
@@ -935,7 +935,18 @@ namespace TestWin
 
         private void button11_Click(object sender, EventArgs e)
         {
+            if (!CheckEncodeLibLoaded()) return;
 
+            try
+            {
+                string text = EncodeLibManager.Instance.GetHardwareInfoText();
+                richTextBox1.Clear();
+                richTextBox1.AppendText(text.Replace("\n", "\r\n"));
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"获取硬件信息失败: {ex.Message}", "错误", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 

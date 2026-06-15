@@ -1285,6 +1285,36 @@ namespace EncodeLib
         }
 
         /// <summary>
+        /// 获取详细硬件信息（Windows ID、磁盘、MAC、主板、CPU、BIOS、系统 UUID 等）
+        /// </summary>
+        /// <returns>多行文本，与 native GetHardwareInfo 格式一致</returns>
+        public string GetHardwareInfoText()
+        {
+            CheckDllLoaded();
+
+            const int bufferSize = 4096;
+            var info = new System.Text.StringBuilder(bufferSize);
+
+            try
+            {
+                var currentManager = GetCurrentDllManager();
+                int errorCode = currentManager.GetHardwareInfo(info, bufferSize);
+
+                if (errorCode != 0)
+                {
+                    throw new InvalidOperationException($"获取硬件信息失败，错误码: {errorCode} ({GetErrorMessage(errorCode)})");
+                }
+
+                return info.ToString();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"EncodeLib获取硬件信息错误: {ex.Message}");
+                throw new InvalidOperationException($"获取硬件信息失败: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
         /// 检查DLL是否已加载的辅助方法
         /// </summary>
         private void CheckDllLoaded()
